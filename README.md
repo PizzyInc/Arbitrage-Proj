@@ -1,6 +1,6 @@
-# Arbitrage Card Trading App
+# Arbitrage-Proj
 
-A previewable MVP dashboard for spotting Pokemon card arbitrage opportunities between eBay US and eBay UK.
+This project is an Arbitrage Card Trading App for finding profitable trading card price gaps between marketplaces, starting with Pokemon cards on eBay US vs eBay UK.
 
 ## What is included
 
