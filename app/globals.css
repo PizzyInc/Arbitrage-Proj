@@ -421,7 +421,7 @@ tbody tr:hover,
 }
 
 .listing-values {
-  align-items: end;
+  align-items: flex-end;
   display: flex;
   justify-content: space-between;
   gap: 8px;
