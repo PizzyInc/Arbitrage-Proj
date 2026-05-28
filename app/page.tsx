@@ -108,20 +108,15 @@ export default function Home() {
 
   useEffect(() => {
     let mounted = true;
-    const params = new URLSearchParams({
-      orderBy: "number",
-      pageSize: "250",
-      q: "set.id:swsh12pt5",
-      select: "id,name,number,rarity,images,tcgplayer,cardmarket"
-    });
 
-    fetch(`https://api.pokemontcg.io/v2/cards?${params.toString()}`)
+    fetch("/api/cards/crown-zenith")
       .then((response) => {
-        if (!response.ok) throw new Error(`PokemonTCG API returned ${response.status}`);
-        return response.json() as Promise<{ data: CrownZenithCard[] }>;
+        if (!response.ok) throw new Error(`Card API returned ${response.status}`);
+        return response.json() as Promise<{ data: CrownZenithCard[]; error?: string }>;
       })
       .then((payload) => {
         if (!mounted) return;
+        if (payload.error) throw new Error(payload.error);
         setCrownCards(payload.data ?? []);
         setCrownError("");
       })
@@ -162,6 +157,16 @@ export default function Home() {
         UK: uk.status === "fulfilled" ? uk.value : undefined
       }
     }));
+  }
+
+  async function loadVisibleSoldComps() {
+    const cardsToLoad = searchedCrownCards
+      .filter((card) => !soldComps[card.id]?.loading && (!soldComps[card.id]?.US || !soldComps[card.id]?.UK))
+      .slice(0, 12);
+
+    for (const card of cardsToLoad) {
+      await loadSoldComps(card);
+    }
   }
 
   function refreshData() {
@@ -288,6 +293,7 @@ export default function Home() {
                 cards={searchedCrownCards}
                 error={crownError}
                 loading={crownLoading}
+                onLoadVisibleSoldComps={loadVisibleSoldComps}
                 onLoadSoldComps={loadSoldComps}
                 search={cardSearch}
                 soldComps={soldComps}
@@ -333,6 +339,7 @@ function CrownZenithBrowser({
   cards,
   error,
   loading,
+  onLoadVisibleSoldComps,
   onLoadSoldComps,
   onSearch,
   search,
@@ -342,6 +349,7 @@ function CrownZenithBrowser({
   cards: CrownZenithCard[];
   error: string;
   loading: boolean;
+  onLoadVisibleSoldComps: () => void;
   onLoadSoldComps: (card: CrownZenithCard) => void;
   onSearch: (value: string) => void;
   search: string;
@@ -367,6 +375,10 @@ function CrownZenithBrowser({
             onChange={(event) => onSearch(event.target.value)}
           />
         </label>
+        <button className="secondary-button" disabled={loading || cards.length === 0} onClick={onLoadVisibleSoldComps} type="button">
+          <RefreshCcw size={15} />
+          Load visible comps
+        </button>
       </div>
 
       {error && <p className="empty-state">Could not load Crown Zenith from PokemonTCG: {error}</p>}
@@ -424,6 +436,14 @@ function CrownCardRow({
       </div>
 
       <div className="market-actions">
+        <div className="comp-summary">
+          <strong>US avg</strong>
+          <span>{formatSoldAverage(sold?.US)}</span>
+        </div>
+        <div className="comp-summary">
+          <strong>UK avg</strong>
+          <span>{formatSoldAverage(sold?.UK)}</span>
+        </div>
         <a href={ebaySearchUrl(card.name, "US")} rel="noreferrer" target="_blank">
           US live <ExternalLink size={14} />
         </a>
@@ -500,6 +520,11 @@ function formatCurrency(value: number, currency: "GBP" | "USD" | "EUR") {
     maximumFractionDigits: 2,
     style: "currency"
   }).format(value);
+}
+
+function formatSoldAverage(sold?: EbaySoldResponse) {
+  if (!sold) return "Not loaded";
+  return sold.average ? formatCurrency(sold.average, sold.currency) : "Open sold link";
 }
 
 function RangeControl({
