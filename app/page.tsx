@@ -6,18 +6,19 @@ import {
   Bot,
   BriefcaseBusiness,
   Clock3,
+  ExternalLink,
   Gauge,
   LineChart,
+  Loader2,
   RefreshCcw,
   Search,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
   Target,
-  TrendingUp,
-  Zap
+  TrendingUp
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   buildOpportunities,
   defaultCostSettings,
@@ -28,10 +29,34 @@ import {
   portfolio,
   Rarity
 } from "@/lib/arbitrage";
+import { EbayMarket, EbaySoldResponse, ebaySearchUrl, ebaySoldUrl } from "@/lib/ebay";
 
-type Tab = "feed" | "detail" | "marketplaces" | "alerts" | "portfolio";
+type Tab = "crown" | "feed" | "detail" | "marketplaces" | "alerts" | "portfolio";
+type SoldComps = {
+  US?: EbaySoldResponse;
+  UK?: EbaySoldResponse;
+  loading?: boolean;
+};
+type CrownZenithCard = {
+  id: string;
+  name: string;
+  number: string;
+  rarity?: string;
+  images?: {
+    small?: string;
+  };
+  tcgplayer?: {
+    prices?: Record<string, { market?: number }>;
+  };
+  cardmarket?: {
+    prices?: {
+      averageSellPrice?: number;
+    };
+  };
+};
 
 const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
+  { id: "crown", label: "Crown", icon: Search },
   { id: "feed", label: "Feed", icon: Activity },
   { id: "detail", label: "Card", icon: Search },
   { id: "marketplaces", label: "Listings", icon: Target },
@@ -43,8 +68,13 @@ const sets = ["All sets", "Crown Zenith", "Obsidian Flames", "Pokemon x Van Gogh
 const rarities: Array<Rarity | "All rarity"> = ["All rarity", "V", "EX", "Full Art", "Secret Rare", "Alt Art", "Promo"];
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<Tab>("feed");
+  const [activeTab, setActiveTab] = useState<Tab>("crown");
   const [selectedId, setSelectedId] = useState<string>("");
+  const [cardSearch, setCardSearch] = useState("");
+  const [crownCards, setCrownCards] = useState<CrownZenithCard[]>([]);
+  const [crownError, setCrownError] = useState("");
+  const [crownLoading, setCrownLoading] = useState(true);
+  const [soldComps, setSoldComps] = useState<Record<string, SoldComps>>({});
   const [setFilter, setSetFilter] = useState("All sets");
   const [rarityFilter, setRarityFilter] = useState<Rarity | "All rarity">("All rarity");
   const [minRoi, setMinRoi] = useState(10);
@@ -72,6 +102,67 @@ export default function Home() {
     : 0;
   const portfolioValue = portfolio.reduce((sum, item) => sum + item.marketValueGbp, 0);
   const portfolioCost = portfolio.reduce((sum, item) => sum + item.costGbp, 0);
+  const searchedCrownCards = crownCards.filter((card) =>
+    card.name.toLowerCase().includes(cardSearch.trim().toLowerCase())
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    const params = new URLSearchParams({
+      orderBy: "number",
+      pageSize: "250",
+      q: "set.id:swsh12pt5",
+      select: "id,name,number,rarity,images,tcgplayer,cardmarket"
+    });
+
+    fetch(`https://api.pokemontcg.io/v2/cards?${params.toString()}`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`PokemonTCG API returned ${response.status}`);
+        return response.json() as Promise<{ data: CrownZenithCard[] }>;
+      })
+      .then((payload) => {
+        if (!mounted) return;
+        setCrownCards(payload.data ?? []);
+        setCrownError("");
+      })
+      .catch((error: Error) => {
+        if (!mounted) return;
+        setCrownError(error.message);
+      })
+      .finally(() => {
+        if (mounted) setCrownLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function loadSoldComps(card: CrownZenithCard) {
+    setSoldComps((current) => ({
+      ...current,
+      [card.id]: {
+        ...current[card.id],
+        loading: true
+      }
+    }));
+
+    const fetchMarket = (market: EbayMarket) =>
+      fetch(`/api/ebay/sold?${new URLSearchParams({ market, query: card.name }).toString()}`).then(
+        (response) => response.json() as Promise<EbaySoldResponse>
+      );
+
+    const [us, uk] = await Promise.allSettled([fetchMarket("US"), fetchMarket("UK")]);
+
+    setSoldComps((current) => ({
+      ...current,
+      [card.id]: {
+        loading: false,
+        US: us.status === "fulfilled" ? us.value : undefined,
+        UK: uk.status === "fulfilled" ? uk.value : undefined
+      }
+    }));
+  }
 
   function refreshData() {
     setLastRefresh(
@@ -137,7 +228,7 @@ export default function Home() {
         <header className="topbar">
           <div>
             <p className="eyebrow">eBay US to eBay UK arbitrage</p>
-            <h1>Opportunities ranked by net profit after costs</h1>
+            <h1>Crown Zenith arbitrage scanner with live eBay paths</h1>
           </div>
           <button className="primary-button" onClick={refreshData} type="button">
             <RefreshCcw size={17} />
@@ -146,9 +237,9 @@ export default function Home() {
         </header>
 
         <section className="metric-grid" aria-label="Summary metrics">
+          <Metric icon={Search} label="Crown cards" value={String(crownCards.length || "...")} detail="Pulled from PokemonTCG" />
           <Metric icon={TrendingUp} label="Filtered profit" value={formatMoney(totalProfit)} detail="Potential gross signal" />
           <Metric icon={Gauge} label="Average ROI" value={formatPercent(averageRoi)} detail="After fees and shipping" />
-          <Metric icon={Zap} label="Live signals" value={String(filtered.length)} detail="Above filter threshold" />
           <Metric icon={Clock3} label="Last refresh" value={lastRefresh} detail="Manual MVP refresh" />
         </section>
 
@@ -192,6 +283,18 @@ export default function Home() {
           </aside>
 
           <section className="main-panel">
+            {activeTab === "crown" && (
+              <CrownZenithBrowser
+                cards={searchedCrownCards}
+                error={crownError}
+                loading={crownLoading}
+                onLoadSoldComps={loadSoldComps}
+                search={cardSearch}
+                soldComps={soldComps}
+                totalCards={crownCards.length}
+                onSearch={setCardSearch}
+              />
+            )}
             {activeTab === "feed" && (
               <OpportunityFeed
                 opportunities={filtered}
@@ -224,6 +327,179 @@ function Metric({ icon: Icon, label, value, detail }: { icon: React.ElementType;
       <small>{detail}</small>
     </article>
   );
+}
+
+function CrownZenithBrowser({
+  cards,
+  error,
+  loading,
+  onLoadSoldComps,
+  onSearch,
+  search,
+  soldComps,
+  totalCards
+}: {
+  cards: CrownZenithCard[];
+  error: string;
+  loading: boolean;
+  onLoadSoldComps: (card: CrownZenithCard) => void;
+  onSearch: (value: string) => void;
+  search: string;
+  soldComps: Record<string, SoldComps>;
+  totalCards: number;
+}) {
+  return (
+    <>
+      <div className="section-title split-title">
+        <div>
+          <div className="section-title">
+            <Search size={18} />
+            <h2>Crown Zenith set browser</h2>
+          </div>
+          <small>{loading ? "Loading the full set..." : `${cards.length} of ${totalCards} cards shown`}</small>
+        </div>
+        <label className="search-field" aria-label="Search Crown Zenith cards">
+          <Search size={16} />
+          <input
+            placeholder="Search card by name"
+            type="search"
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+          />
+        </label>
+      </div>
+
+      {error && <p className="empty-state">Could not load Crown Zenith from PokemonTCG: {error}</p>}
+      {loading && (
+        <div className="loading-state">
+          <Loader2 size={18} />
+          <span>Fetching real Crown Zenith card data...</span>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="crown-grid">
+          {cards.map((card) => (
+            <CrownCardRow
+              card={card}
+              key={card.id}
+              onLoadSoldComps={onLoadSoldComps}
+              sold={soldComps[card.id]}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function CrownCardRow({
+  card,
+  onLoadSoldComps,
+  sold
+}: {
+  card: CrownZenithCard;
+  onLoadSoldComps: (card: CrownZenithCard) => void;
+  sold?: SoldComps;
+}) {
+  const tcgMarket = getTcgMarket(card);
+  const cardmarket = card.cardmarket?.prices?.averageSellPrice;
+
+  return (
+    <article className="crown-card">
+      <div className="crown-card-main">
+        <div className="crown-thumb">
+          {card.images?.small ? <img alt={card.name} src={card.images.small} /> : <span>{card.number}</span>}
+        </div>
+        <div>
+          <strong>{card.name}</strong>
+          <small>
+            #{card.number} / {card.rarity ?? "Unknown rarity"}
+          </small>
+          <div className="pill-row compact">
+            <span>TCGPlayer {tcgMarket ? formatCurrency(tcgMarket, "USD") : "n/a"}</span>
+            <span>Cardmarket {cardmarket ? formatCurrency(cardmarket, "EUR") : "n/a"}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="market-actions">
+        <a href={ebaySearchUrl(card.name, "US")} rel="noreferrer" target="_blank">
+          US live <ExternalLink size={14} />
+        </a>
+        <a href={ebaySearchUrl(card.name, "UK")} rel="noreferrer" target="_blank">
+          UK live <ExternalLink size={14} />
+        </a>
+        <a href={ebaySoldUrl(card.name, "US")} rel="noreferrer" target="_blank">
+          US sold <ExternalLink size={14} />
+        </a>
+        <a href={ebaySoldUrl(card.name, "UK")} rel="noreferrer" target="_blank">
+          UK sold <ExternalLink size={14} />
+        </a>
+        <button disabled={sold?.loading} onClick={() => onLoadSoldComps(card)} type="button">
+          {sold?.loading ? <Loader2 size={14} /> : <RefreshCcw size={14} />}
+          Last 3 sold
+        </button>
+      </div>
+
+      {sold && !sold.loading && (
+        <div className="sold-comps">
+          <SoldCompsPanel market="US" sold={sold.US} />
+          <SoldCompsPanel market="UK" sold={sold.UK} />
+        </div>
+      )}
+    </article>
+  );
+}
+
+function SoldCompsPanel({ market, sold }: { market: EbayMarket; sold?: EbaySoldResponse }) {
+  if (!sold) {
+    return (
+      <div className="sold-panel">
+        <strong>{market} last sold</strong>
+        <small>Could not load comps.</small>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sold-panel">
+      <strong>
+        {market} avg: {sold.average ? formatCurrency(sold.average, sold.currency) : "n/a"}
+      </strong>
+      {sold.sales.length > 0 ? (
+        sold.sales.map((sale) => (
+          <a href={sale.url} key={sale.url} rel="noreferrer" target="_blank">
+            {formatCurrency(sale.price, sale.currency)} <span>{sale.title}</span>
+          </a>
+        ))
+      ) : (
+        <a href={sold.sourceUrl} rel="noreferrer" target="_blank">
+          Open eBay sold results <ExternalLink size={13} />
+        </a>
+      )}
+      {sold.warning && <small>{sold.warning}</small>}
+    </div>
+  );
+}
+
+function getTcgMarket(card: CrownZenithCard) {
+  const prices = card.tcgplayer?.prices;
+  if (!prices) return null;
+
+  for (const price of Object.values(prices)) {
+    if (typeof price.market === "number") return price.market;
+  }
+
+  return null;
+}
+
+function formatCurrency(value: number, currency: "GBP" | "USD" | "EUR") {
+  return new Intl.NumberFormat(currency === "GBP" ? "en-GB" : "en-US", {
+    currency,
+    maximumFractionDigits: 2,
+    style: "currency"
+  }).format(value);
 }
 
 function RangeControl({

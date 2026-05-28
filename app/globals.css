@@ -158,6 +158,38 @@ td small,
   gap: 10px;
 }
 
+.split-title {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.split-title > div {
+  display: grid;
+  gap: 6px;
+}
+
+.search-field {
+  align-items: center;
+  background: #0c1117;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex: 0 1 340px;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.search-field input {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
 .workspace {
   display: grid;
   gap: 18px;
@@ -343,6 +375,132 @@ tbody tr:hover,
 .empty-state {
   color: var(--muted);
   margin: 28px 0 0;
+}
+
+.loading-state {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.loading-state svg {
+  animation: spin 1s linear infinite;
+}
+
+.crown-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.crown-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 12px;
+}
+
+.crown-card-main {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.crown-thumb {
+  align-items: center;
+  background: #080c11;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  height: 78px;
+  justify-content: center;
+  overflow: hidden;
+  width: 58px;
+}
+
+.crown-thumb img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.compact {
+  margin: 8px 0 0;
+}
+
+.market-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.market-actions a,
+.market-actions button,
+.sold-panel a {
+  align-items: center;
+  background: #0c1117;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: inline-flex;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  text-decoration: none;
+}
+
+.market-actions a:hover,
+.market-actions button:hover,
+.sold-panel a:hover {
+  border-color: #285942;
+  color: var(--green);
+}
+
+.market-actions button {
+  color: var(--green);
+}
+
+.market-actions button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.sold-comps {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sold-panel {
+  background: #0c1117;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.sold-panel a {
+  justify-content: space-between;
+  max-width: 100%;
+}
+
+.sold-panel a span {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .detail-layout {
@@ -579,8 +737,15 @@ code {
   }
 
   .timeline div,
-  .portfolio-list article {
+  .portfolio-list article,
+  .split-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .search-field,
+  .sold-comps {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 }
