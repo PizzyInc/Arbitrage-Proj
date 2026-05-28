@@ -37,6 +37,11 @@ type SoldComps = {
   UK?: EbaySoldResponse;
   loading?: boolean;
 };
+type PushSubscriptionPayload = {
+  endpoint: string;
+  expirationTime?: number | null;
+  keys?: Record<string, string>;
+};
 type CrownZenithCard = {
   id: string;
   name: string;
@@ -709,12 +714,80 @@ function MarketplaceListings() {
 }
 
 function AlertsDashboard({ selected }: { selected?: Opportunity }) {
+  const [pushStatus, setPushStatus] = useState("Not enabled");
+  const [pushSubscription, setPushSubscription] = useState<PushSubscriptionPayload | null>(null);
   const alertRules = [
     "New arbitrage opportunity over 20% ROI",
     "Watched card drops below target buy price",
     "Auction ending soon with positive spread",
     "Portfolio spread widens by 10%"
   ];
+
+  async function enablePushAlerts() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      setPushStatus("Push notifications are not supported on this browser.");
+      return;
+    }
+
+    setPushStatus("Requesting permission...");
+    const permission = await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      setPushStatus("Notification permission was not granted.");
+      return;
+    }
+
+    const keyResponse = await fetch("/api/push/vapid-public-key");
+    const { publicKey } = (await keyResponse.json()) as { publicKey: string | null };
+
+    if (!publicKey) {
+      setPushStatus("Missing VAPID keys. Add them in Vercel environment variables.");
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    const existing = await registration.pushManager.getSubscription();
+    const subscription =
+      existing ??
+      (await registration.pushManager.subscribe({
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        userVisibleOnly: true
+      }));
+
+    const subscriptionPayload = subscription.toJSON() as PushSubscriptionPayload;
+
+    await fetch("/api/push/subscribe", {
+      body: JSON.stringify(subscriptionPayload),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+
+    setPushSubscription(subscriptionPayload);
+    setPushStatus("Enabled. You can receive status-bar push alerts.");
+  }
+
+  async function sendTestPush() {
+    setPushStatus("Sending test push...");
+    const response = await fetch("/api/push/test", {
+      body: JSON.stringify({
+        body: selected
+          ? `${selected.cardName}: ${formatMoney(selected.netProfitGbp)} estimated profit, ${formatPercent(selected.roiPct)} ROI.`
+          : "Push notifications are enabled for arbitrage alerts.",
+        subscription: pushSubscription,
+        title: "ArbiCards opportunity alert",
+        url: "/"
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const result = (await response.json()) as { error?: string; ok?: boolean; sent?: number };
+
+    setPushStatus(result.ok ? `Test sent to ${result.sent ?? 1} device.` : result.error ?? "Test push could not be sent.");
+  }
 
   return (
     <div>
@@ -729,6 +802,17 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
           <p>Connect a bot token and chat ID on the host to send high-signal alerts into your trading workflow.</p>
           <code>POST /api/alerts/telegram</code>
           <button type="button">Send test alert</button>
+        </article>
+        <article className="telegram-panel">
+          <Bell size={26} />
+          <h3>Phone push alerts</h3>
+          <p>Enable browser push so installed users can receive status-bar alerts when new arbitrage signals appear.</p>
+          <code>POST /api/push/test</code>
+          <div className="button-stack">
+            <button onClick={enablePushAlerts} type="button">Enable push alerts</button>
+            <button disabled={!pushSubscription} onClick={sendTestPush} type="button">Send test push</button>
+          </div>
+          <small>{pushStatus}</small>
         </article>
         <div className="rule-list">
           {alertRules.map((rule, index) => (
@@ -750,6 +834,19 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
       )}
     </div>
   );
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
 }
 
 function PortfolioPanel({ portfolioCost, portfolioValue }: { portfolioCost: number; portfolioValue: number }) {

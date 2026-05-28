@@ -644,7 +644,7 @@ tbody tr:hover,
 .alert-layout {
   display: grid;
   gap: 16px;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 16px;
 }
 
@@ -658,6 +658,20 @@ tbody tr:hover,
   color: var(--muted);
   line-height: 1.5;
   margin-bottom: 0;
+}
+
+.telegram-panel small {
+  color: var(--muted);
+}
+
+.button-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.button-stack button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 code {
