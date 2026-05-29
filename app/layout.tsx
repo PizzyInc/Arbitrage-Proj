@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Arbitrage Card Trading App",
-  description: "Pokemon card arbitrage dashboard for eBay US and eBay UK spreads.",
+  title: "ArbiCards | Card Market Intelligence",
+  description: "Track Pokemon card spreads, sold comps, and arbitrage alerts across US and UK marketplaces.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

@@ -1,7 +1,7 @@
 self.addEventListener("push", (event) => {
   let payload = {
-    title: "ArbiCards alert",
-    body: "New arbitrage signal available.",
+    title: "ArbiCards signal",
+    body: "A new card spread is ready to review.",
     url: "/"
   };
 

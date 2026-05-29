@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const chatId = payload.chatId ?? process.env.TELEGRAM_CHAT_ID;
   const message =
     payload.message ??
-    "New card arbitrage signal: review the ArbiCards opportunity feed for the latest US to UK spread.";
+    "New ArbiCards signal: review the latest US to UK spread before the market catches up.";
 
   if (!token || !chatId) {
     return NextResponse.json(
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
         ok: false,
         mode: "preview",
         message,
-        reason: "Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to deliver real alerts."
+        reason: "Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to deliver Telegram alerts."
       },
       { status: 202 }
     );

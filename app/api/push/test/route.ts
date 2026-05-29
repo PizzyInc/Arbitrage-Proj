@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   }
 
   const message = JSON.stringify({
-    body: payload.body ?? "Push notifications are enabled for arbitrage alerts.",
+    body: payload.body ?? "Push alerts are enabled for ArbiCards signals.",
     title: payload.title ?? "ArbiCards test alert",
     url: payload.url ?? "/"
   });

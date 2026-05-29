@@ -1,7 +1,7 @@
 {
   "name": "ArbiCards",
   "short_name": "ArbiCards",
-  "description": "Pokemon card arbitrage alerts and Crown Zenith eBay scanner.",
+  "description": "Pokemon card spread tracking, sold comps, and trade alerts.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

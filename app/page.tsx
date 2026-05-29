@@ -193,7 +193,7 @@ export default function Home() {
           <span className="brand-mark">A</span>
           <div>
             <strong>ArbiCards</strong>
-            <small>Card trading intelligence</small>
+            <small>Card market intelligence</small>
           </div>
         </div>
 
@@ -216,19 +216,19 @@ export default function Home() {
         </nav>
 
         <div className="sidebar-panel">
-          <span className="panel-label">Automation</span>
+          <span className="panel-label">Alert channels</span>
           <div className="status-row">
             <Bot size={18} />
             <div>
-              <strong>Telegram ready</strong>
-              <small>Webhook placeholder configured</small>
+              <strong>Telegram signals</strong>
+              <small>Route high-value spreads to chat</small>
             </div>
           </div>
           <div className="status-row">
             <ShieldCheck size={18} />
             <div>
-              <strong>Manual mode</strong>
-              <small>Auto-buy disabled for MVP</small>
+              <strong>Push ready</strong>
+              <small>Install the app for phone alerts</small>
             </div>
           </div>
         </div>
@@ -237,27 +237,27 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">eBay US to eBay UK arbitrage</p>
-            <h1>Crown Zenith arbitrage scanner with live eBay paths</h1>
+            <p className="eyebrow">Pokemon card market intelligence</p>
+            <h1>Find underpriced Crown Zenith cards before the spread closes</h1>
           </div>
           <button className="primary-button" onClick={refreshData} type="button">
             <RefreshCcw size={17} />
-            Refresh
+            Sync market view
           </button>
         </header>
 
         <section className="metric-grid" aria-label="Summary metrics">
-          <Metric icon={Search} label="Crown cards" value={String(crownCards.length || "...")} detail="Pulled from PokemonTCG" />
-          <Metric icon={TrendingUp} label="Filtered profit" value={formatMoney(totalProfit)} detail="Potential gross signal" />
-          <Metric icon={Gauge} label="Average ROI" value={formatPercent(averageRoi)} detail="After fees and shipping" />
-          <Metric icon={Clock3} label="Last refresh" value={lastRefresh} detail="Manual MVP refresh" />
+          <Metric icon={Search} label="Set coverage" value={String(crownCards.length || "...")} detail="Crown Zenith cards tracked" />
+          <Metric icon={TrendingUp} label="Opportunity value" value={formatMoney(totalProfit)} detail="Modeled profit after costs" />
+          <Metric icon={Gauge} label="Avg signal ROI" value={formatPercent(averageRoi)} detail="Current filtered opportunities" />
+          <Metric icon={Clock3} label="Last synced" value={lastRefresh} detail="Manual market refresh" />
         </section>
 
         <div className="content-grid">
           <aside className="filters-panel">
             <div className="section-title">
               <SlidersHorizontal size={18} />
-              <h2>Smart filters</h2>
+              <h2>Opportunity filters</h2>
             </div>
 
             <label>
@@ -284,7 +284,7 @@ export default function Home() {
 
             <div className="section-title cost-heading">
               <Settings2 size={18} />
-              <h2>Cost model</h2>
+              <h2>Cost assumptions</h2>
             </div>
             <NumberControl label="FX USD to GBP" value={settings.fxUsdToGbp} step={0.01} onChange={(fxUsdToGbp) => setSettings({ ...settings, fxUsdToGbp })} />
             <NumberControl label="eBay fee %" value={settings.ebayFeePct} step={0.1} onChange={(ebayFeePct) => setSettings({ ...settings, ebayFeePct })} />
@@ -367,14 +367,14 @@ function CrownZenithBrowser({
         <div>
           <div className="section-title">
             <Search size={18} />
-            <h2>Crown Zenith set browser</h2>
+            <h2>Crown Zenith watchlist</h2>
           </div>
-          <small>{loading ? "Loading the full set..." : `${cards.length} of ${totalCards} cards shown`}</small>
+          <small>{loading ? "Building the set watchlist..." : `${cards.length} of ${totalCards} cards in view`}</small>
         </div>
         <label className="search-field" aria-label="Search Crown Zenith cards">
           <Search size={16} />
           <input
-            placeholder="Search card by name"
+            placeholder="Search cards by name"
             type="search"
             value={search}
             onChange={(event) => onSearch(event.target.value)}
@@ -382,15 +382,15 @@ function CrownZenithBrowser({
         </label>
         <button className="secondary-button" disabled={loading || cards.length === 0} onClick={onLoadVisibleSoldComps} type="button">
           <RefreshCcw size={15} />
-          Load visible comps
+          Load comps for view
         </button>
       </div>
 
-      {error && <p className="empty-state">Could not load Crown Zenith from PokemonTCG: {error}</p>}
+      {error && <p className="empty-state">Crown Zenith data is unavailable right now: {error}</p>}
       {loading && (
         <div className="loading-state">
           <Loader2 size={18} />
-          <span>Fetching real Crown Zenith card data...</span>
+          <span>Pulling live Crown Zenith card data...</span>
         </div>
       )}
 
@@ -450,10 +450,10 @@ function CrownCardRow({
           <span>{formatSoldAverage(sold?.UK)}</span>
         </div>
         <a href={ebaySearchUrl(card.name, "US")} rel="noreferrer" target="_blank">
-          US live <ExternalLink size={14} />
+          US active <ExternalLink size={14} />
         </a>
         <a href={ebaySearchUrl(card.name, "UK")} rel="noreferrer" target="_blank">
-          UK live <ExternalLink size={14} />
+          UK active <ExternalLink size={14} />
         </a>
         <a href={ebaySoldUrl(card.name, "US")} rel="noreferrer" target="_blank">
           US sold <ExternalLink size={14} />
@@ -463,7 +463,7 @@ function CrownCardRow({
         </a>
         <button disabled={sold?.loading} onClick={() => onLoadSoldComps(card)} type="button">
           {sold?.loading ? <Loader2 size={14} /> : <RefreshCcw size={14} />}
-          Last 3 sold
+          Get last 3
         </button>
       </div>
 
@@ -481,8 +481,8 @@ function SoldCompsPanel({ market, sold }: { market: EbayMarket; sold?: EbaySoldR
   if (!sold) {
     return (
       <div className="sold-panel">
-        <strong>{market} last sold</strong>
-        <small>Could not load comps.</small>
+        <strong>{market} sold comps</strong>
+        <small>Comps have not loaded yet.</small>
       </div>
     );
   }
@@ -500,7 +500,7 @@ function SoldCompsPanel({ market, sold }: { market: EbayMarket; sold?: EbaySoldR
         ))
       ) : (
         <a href={sold.sourceUrl} rel="noreferrer" target="_blank">
-          Open eBay sold results <ExternalLink size={13} />
+          View sold results on eBay <ExternalLink size={13} />
         </a>
       )}
       {sold.warning && <small>{sold.warning}</small>}
@@ -528,8 +528,8 @@ function formatCurrency(value: number, currency: "GBP" | "USD" | "EUR") {
 }
 
 function formatSoldAverage(sold?: EbaySoldResponse) {
-  if (!sold) return "Not loaded";
-  return sold.average ? formatCurrency(sold.average, sold.currency) : "Open sold link";
+  if (!sold) return "Not checked";
+  return sold.average ? formatCurrency(sold.average, sold.currency) : "Check sold link";
 }
 
 function RangeControl({
@@ -596,7 +596,7 @@ function OpportunityFeed({
     <>
       <div className="section-title">
         <LineChart size={18} />
-        <h2>Opportunity feed</h2>
+        <h2>Modeled opportunities</h2>
       </div>
       <div className="table-shell">
         <table>
@@ -640,7 +640,7 @@ function OpportunityFeed({
             ))}
           </tbody>
         </table>
-        {!opportunities.length && <p className="empty-state">No opportunities match the current filters.</p>}
+        {!opportunities.length && <p className="empty-state">No signals meet the current filters.</p>}
       </div>
     </>
   );
@@ -661,22 +661,22 @@ function CardDetail({ opportunity }: { opportunity: Opportunity }) {
           <span>{opportunity.liquidity} sales / 30d</span>
         </div>
         <div className="detail-stats">
-          <Metric icon={Target} label="Buy market" value={formatMoney(opportunity.buyPriceGbp)} detail={opportunity.buyMarket.marketplace} />
-          <Metric icon={TrendingUp} label="Sell market" value={formatMoney(opportunity.sellPriceGbp)} detail={opportunity.sellMarket.marketplace} />
-          <Metric icon={Gauge} label="Net profit" value={formatMoney(opportunity.netProfitGbp)} detail={formatPercent(opportunity.roiPct)} />
+          <Metric icon={Target} label="Entry price" value={formatMoney(opportunity.buyPriceGbp)} detail={opportunity.buyMarket.marketplace} />
+          <Metric icon={TrendingUp} label="Exit value" value={formatMoney(opportunity.sellPriceGbp)} detail={opportunity.sellMarket.marketplace} />
+          <Metric icon={Gauge} label="Projected profit" value={formatMoney(opportunity.netProfitGbp)} detail={formatPercent(opportunity.roiPct)} />
         </div>
         <div className="timeline">
           <div>
-            <strong>US last sold</strong>
+            <strong>US comp</strong>
             <span>{opportunity.buyMarket.soldDate} by {opportunity.buyMarket.seller}</span>
           </div>
           <div>
-            <strong>UK last sold</strong>
+            <strong>UK comp</strong>
             <span>{opportunity.sellMarket.soldDate} by {opportunity.sellMarket.seller}</span>
           </div>
           <div>
             <strong>Signal</strong>
-            <span>{formatPercent(opportunity.spreadPct)} regional spread with {opportunity.confidence}/100 confidence</span>
+            <span>{formatPercent(opportunity.spreadPct)} market spread with {opportunity.confidence}/100 confidence</span>
           </div>
         </div>
       </div>
@@ -689,7 +689,7 @@ function MarketplaceListings() {
     <>
       <div className="section-title">
         <Target size={18} />
-        <h2>Marketplace listings</h2>
+        <h2>Live listing radar</h2>
       </div>
       <div className="listing-grid">
         {liveMarketplaceListings.map((listing) => (
@@ -717,15 +717,15 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
   const [pushStatus, setPushStatus] = useState("Not enabled");
   const [pushSubscription, setPushSubscription] = useState<PushSubscriptionPayload | null>(null);
   const alertRules = [
-    "New arbitrage opportunity over 20% ROI",
-    "Watched card drops below target buy price",
-    "Auction ending soon with positive spread",
-    "Portfolio spread widens by 10%"
+    "New spread clears 20% ROI",
+    "Watched card drops below target entry",
+    "Auction is ending with positive margin",
+    "Portfolio resale spread widens by 10%"
   ];
 
   async function enablePushAlerts() {
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-      setPushStatus("Push notifications are not supported on this browser.");
+      setPushStatus("This browser does not support push alerts.");
       return;
     }
 
@@ -733,7 +733,7 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
     const permission = await Notification.requestPermission();
 
     if (permission !== "granted") {
-      setPushStatus("Notification permission was not granted.");
+      setPushStatus("Notification permission was not enabled.");
       return;
     }
 
@@ -741,7 +741,7 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
     const { publicKey } = (await keyResponse.json()) as { publicKey: string | null };
 
     if (!publicKey) {
-      setPushStatus("Missing VAPID keys. Add them in Vercel environment variables.");
+      setPushStatus("Push keys are missing. Add VAPID keys in Vercel.");
       return;
     }
 
@@ -765,7 +765,7 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
     });
 
     setPushSubscription(subscriptionPayload);
-    setPushStatus("Enabled. You can receive status-bar push alerts.");
+    setPushStatus("Enabled. This device can receive trading alerts.");
   }
 
   async function sendTestPush() {
@@ -774,9 +774,9 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
       body: JSON.stringify({
         body: selected
           ? `${selected.cardName}: ${formatMoney(selected.netProfitGbp)} estimated profit, ${formatPercent(selected.roiPct)} ROI.`
-          : "Push notifications are enabled for arbitrage alerts.",
+          : "Push alerts are enabled for ArbiCards signals.",
         subscription: pushSubscription,
-        title: "ArbiCards opportunity alert",
+        title: "ArbiCards trading signal",
         url: "/"
       }),
       headers: {
@@ -786,27 +786,27 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
     });
     const result = (await response.json()) as { error?: string; ok?: boolean; sent?: number };
 
-    setPushStatus(result.ok ? `Test sent to ${result.sent ?? 1} device.` : result.error ?? "Test push could not be sent.");
+    setPushStatus(result.ok ? `Test sent to ${result.sent ?? 1} device.` : result.error ?? "Test push was not delivered.");
   }
 
   return (
     <div>
       <div className="section-title">
         <Bell size={18} />
-        <h2>Alerts dashboard</h2>
+        <h2>Signal alerts</h2>
       </div>
       <div className="alert-layout">
         <article className="telegram-panel">
           <Bot size={26} />
-          <h3>Telegram bot</h3>
-          <p>Connect a bot token and chat ID on the host to send high-signal alerts into your trading workflow.</p>
+          <h3>Telegram delivery</h3>
+          <p>Send priority spreads straight to your trading chat the moment they clear your rules.</p>
           <code>POST /api/alerts/telegram</code>
           <button type="button">Send test alert</button>
         </article>
         <article className="telegram-panel">
           <Bell size={26} />
-          <h3>Phone push alerts</h3>
-          <p>Enable browser push so installed users can receive status-bar alerts when new arbitrage signals appear.</p>
+          <h3>Phone notifications</h3>
+          <p>Install the app and enable push alerts to get time-sensitive signals in your status bar.</p>
           <code>POST /api/push/test</code>
           <div className="button-stack">
             <button onClick={enablePushAlerts} type="button">Enable push alerts</button>
@@ -825,9 +825,9 @@ function AlertsDashboard({ selected }: { selected?: Opportunity }) {
       </div>
       {selected && (
         <div className="watch-card">
-          <strong>Current watch target</strong>
+          <strong>Current watch rule</strong>
           <span>
-            {selected.cardName}: alert when ROI stays above {Math.max(20, Math.round(selected.roiPct))}% or US landed cost falls below{" "}
+            {selected.cardName}: notify when ROI holds above {Math.max(20, Math.round(selected.roiPct))}% or US landed cost falls below{" "}
             {formatMoney(selected.landedCostGbp * 0.94)}.
           </span>
         </div>
@@ -854,11 +854,11 @@ function PortfolioPanel({ portfolioCost, portfolioValue }: { portfolioCost: numb
     <>
       <div className="section-title">
         <BriefcaseBusiness size={18} />
-        <h2>Portfolio / PnL</h2>
+        <h2>Holdings and PnL</h2>
       </div>
       <section className="portfolio-summary">
-        <Metric icon={BriefcaseBusiness} label="Inventory cost" value={formatMoney(portfolioCost)} detail="Tracked purchases" />
-        <Metric icon={TrendingUp} label="Market value" value={formatMoney(portfolioValue)} detail="Estimated resale" />
+        <Metric icon={BriefcaseBusiness} label="Cost basis" value={formatMoney(portfolioCost)} detail="Tracked entries" />
+        <Metric icon={TrendingUp} label="Resale value" value={formatMoney(portfolioValue)} detail="Current estimate" />
         <Metric icon={Gauge} label="Unrealized PnL" value={formatMoney(portfolioValue - portfolioCost)} detail={formatPercent(((portfolioValue - portfolioCost) / portfolioCost) * 100)} />
       </section>
       <div className="portfolio-list">

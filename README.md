@@ -1,15 +1,16 @@
 # Arbitrage-Proj
 
-This project is an Arbitrage Card Trading App for finding profitable trading card price gaps between marketplaces, starting with Pokemon cards on eBay US vs eBay UK.
+ArbiCards is a trading-card intelligence dashboard for spotting market spreads, checking sold comps, and moving quickly on Pokemon card opportunities across US and UK marketplaces.
 
 ## What is included
 
-- Opportunity feed with ROI, profit, spread, liquidity, and confidence signals
-- Card detail panel with regional sold-price history and marketplace listings
-- Smart filters for set, rarity, price range, minimum ROI, and liquidity
-- Alerts dashboard for Telegram, push, and email rules
-- Portfolio/PnL tracking screen
-- Mock arbitrage engine that models FX, platform fees, shipping, import duties, and confidence
+- Crown Zenith watchlist with live card data
+- Direct eBay US and UK active/sold search links for each card
+- Last-three-sold comp checks with average pricing when eBay can be parsed
+- Modeled opportunity feed with ROI, spread, liquidity, and confidence signals
+- Alert hub for Telegram and installed-app push notifications
+- Holdings and PnL tracking
+- Cost model for FX, platform fees, shipping, duties, and resale margin
 
 ## Run locally
 
@@ -33,4 +34,4 @@ If dependencies cannot be installed on the current machine, open `preview/index.
 
 ## Live data integration path
 
-The current app uses deterministic mock data in `lib/arbitrage.ts` so the client can preview the full workflow immediately. Replace the mock sold-listing arrays with eBay Browse/Finding API responses and FX API rates, keeping the normalized `MarketListing` shape.
+The app uses PokemonTCG data for the Crown Zenith watchlist, direct eBay links for live research, and a best-effort sold-comps parser for recent sales. Replace the mock opportunity arrays in `lib/arbitrage.ts` with authenticated eBay and FX API responses when moving from preview to production-grade market data.
