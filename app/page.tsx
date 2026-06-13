@@ -31,12 +31,14 @@ import {
 } from "@/lib/arbitrage";
 import { EbayMarket, EbaySoldResponse, ebaySearchUrl, ebaySoldUrl } from "@/lib/ebay";
 
-type Tab = "crown" | "feed" | "detail" | "marketplaces" | "alerts" | "portfolio";
+type Tab = "crown" | "targeted" | "feed" | "detail" | "marketplaces" | "alerts" | "portfolio";
 type SoldComps = {
   US?: EbaySoldResponse;
   UK?: EbaySoldResponse;
   loading?: boolean;
 };
+type GradeProfile = "Raw" | "PSA 10" | "PSA 9" | "CGC 10" | "CGC 9" | "ACE 10" | "ACE 9";
+type SortMode = "number" | "priceHigh" | "priceLow" | "biggestMargin" | "gradeHigh";
 type PushSubscriptionPayload = {
   endpoint: string;
   expirationTime?: number | null;
@@ -62,6 +64,7 @@ type CrownZenithCard = {
 
 const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
   { id: "crown", label: "Crown", icon: Search },
+  { id: "targeted", label: "Targeted", icon: Target },
   { id: "feed", label: "Feed", icon: Activity },
   { id: "detail", label: "Card", icon: Search },
   { id: "marketplaces", label: "Listings", icon: Target },
@@ -71,6 +74,14 @@ const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
 
 const sets = ["All sets", "Crown Zenith", "Obsidian Flames", "Pokemon x Van Gogh", "Evolving Skies"];
 const rarities: Array<Rarity | "All rarity"> = ["All rarity", "V", "EX", "Full Art", "Secret Rare", "Alt Art", "Promo"];
+const gradeProfiles: GradeProfile[] = ["Raw", "PSA 10", "PSA 9", "CGC 10", "CGC 9", "ACE 10", "ACE 9"];
+const sortOptions: Array<{ label: string; value: SortMode }> = [
+  { label: "Set number", value: "number" },
+  { label: "Price high", value: "priceHigh" },
+  { label: "Price low", value: "priceLow" },
+  { label: "Biggest margin", value: "biggestMargin" },
+  { label: "Grade high-low", value: "gradeHigh" }
+];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("crown");
@@ -80,6 +91,9 @@ export default function Home() {
   const [crownError, setCrownError] = useState("");
   const [crownLoading, setCrownLoading] = useState(true);
   const [soldComps, setSoldComps] = useState<Record<string, SoldComps>>({});
+  const [gradeProfile, setGradeProfile] = useState<GradeProfile>("Raw");
+  const [sortMode, setSortMode] = useState<SortMode>("number");
+  const [targetedIds, setTargetedIds] = useState<string[]>([]);
   const [setFilter, setSetFilter] = useState("All sets");
   const [rarityFilter, setRarityFilter] = useState<Rarity | "All rarity">("All rarity");
   const [minRoi, setMinRoi] = useState(10);
@@ -107,8 +121,27 @@ export default function Home() {
     : 0;
   const portfolioValue = portfolio.reduce((sum, item) => sum + item.marketValueGbp, 0);
   const portfolioCost = portfolio.reduce((sum, item) => sum + item.costGbp, 0);
-  const searchedCrownCards = crownCards.filter((card) =>
-    card.name.toLowerCase().includes(cardSearch.trim().toLowerCase())
+  const searchedCrownCards = useMemo(
+    () =>
+      sortCards(
+        crownCards.filter((card) => card.name.toLowerCase().includes(cardSearch.trim().toLowerCase())),
+        sortMode,
+        soldComps,
+        settings.fxUsdToGbp,
+        gradeProfile
+      ),
+    [cardSearch, crownCards, gradeProfile, settings.fxUsdToGbp, soldComps, sortMode]
+  );
+  const targetedCards = useMemo(
+    () =>
+      sortCards(
+        crownCards.filter((card) => targetedIds.includes(card.id)),
+        sortMode,
+        soldComps,
+        settings.fxUsdToGbp,
+        gradeProfile
+      ),
+    [crownCards, gradeProfile, settings.fxUsdToGbp, soldComps, sortMode, targetedIds]
   );
 
   useEffect(() => {
@@ -138,6 +171,17 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem("arbicards-targeted");
+    if (saved) {
+      setTargetedIds(JSON.parse(saved) as string[]);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("arbicards-targeted", JSON.stringify(targetedIds));
+  }, [targetedIds]);
+
   async function loadSoldComps(card: CrownZenithCard) {
     setSoldComps((current) => ({
       ...current,
@@ -148,7 +192,7 @@ export default function Home() {
     }));
 
     const fetchMarket = (market: EbayMarket) =>
-      fetch(`/api/ebay/sold?${new URLSearchParams({ market, query: card.name }).toString()}`).then(
+      fetch(`/api/ebay/sold?${new URLSearchParams({ market, query: buildCardQuery(card.name, gradeProfile) }).toString()}`).then(
         (response) => response.json() as Promise<EbaySoldResponse>
       );
 
@@ -165,13 +209,20 @@ export default function Home() {
   }
 
   async function loadVisibleSoldComps() {
-    const cardsToLoad = searchedCrownCards
+    const visibleCards = activeTab === "targeted" ? targetedCards : searchedCrownCards;
+    const cardsToLoad = visibleCards
       .filter((card) => !soldComps[card.id]?.loading && (!soldComps[card.id]?.US || !soldComps[card.id]?.UK))
       .slice(0, 12);
 
     for (const card of cardsToLoad) {
       await loadSoldComps(card);
     }
+  }
+
+  function toggleTargeted(card: CrownZenithCard) {
+    setTargetedIds((current) =>
+      current.includes(card.id) ? current.filter((id) => id !== card.id) : [...current, card.id]
+    );
   }
 
   function refreshData() {
@@ -297,13 +348,42 @@ export default function Home() {
               <CrownZenithBrowser
                 cards={searchedCrownCards}
                 error={crownError}
+                gradeProfile={gradeProfile}
+                isTargetedView={false}
                 loading={crownLoading}
                 onLoadVisibleSoldComps={loadVisibleSoldComps}
                 onLoadSoldComps={loadSoldComps}
+                onGradeProfileChange={setGradeProfile}
                 search={cardSearch}
                 soldComps={soldComps}
+                sortMode={sortMode}
+                targetedIds={targetedIds}
                 totalCards={crownCards.length}
                 onSearch={setCardSearch}
+                onSortModeChange={setSortMode}
+                onToggleTargeted={toggleTargeted}
+                fxUsdToGbp={settings.fxUsdToGbp}
+              />
+            )}
+            {activeTab === "targeted" && (
+              <CrownZenithBrowser
+                cards={targetedCards}
+                error={crownError}
+                gradeProfile={gradeProfile}
+                isTargetedView
+                loading={crownLoading}
+                onLoadVisibleSoldComps={loadVisibleSoldComps}
+                onLoadSoldComps={loadSoldComps}
+                onGradeProfileChange={setGradeProfile}
+                search={cardSearch}
+                soldComps={soldComps}
+                sortMode={sortMode}
+                targetedIds={targetedIds}
+                totalCards={targetedIds.length}
+                onSearch={setCardSearch}
+                onSortModeChange={setSortMode}
+                onToggleTargeted={toggleTargeted}
+                fxUsdToGbp={settings.fxUsdToGbp}
               />
             )}
             {activeTab === "feed" && (
@@ -343,22 +423,38 @@ function Metric({ icon: Icon, label, value, detail }: { icon: React.ElementType;
 function CrownZenithBrowser({
   cards,
   error,
+  fxUsdToGbp,
+  gradeProfile,
+  isTargetedView,
   loading,
+  onGradeProfileChange,
   onLoadVisibleSoldComps,
   onLoadSoldComps,
   onSearch,
+  onSortModeChange,
+  onToggleTargeted,
   search,
   soldComps,
+  sortMode,
+  targetedIds,
   totalCards
 }: {
   cards: CrownZenithCard[];
   error: string;
+  fxUsdToGbp: number;
+  gradeProfile: GradeProfile;
+  isTargetedView: boolean;
   loading: boolean;
+  onGradeProfileChange: (value: GradeProfile) => void;
   onLoadVisibleSoldComps: () => void;
   onLoadSoldComps: (card: CrownZenithCard) => void;
   onSearch: (value: string) => void;
+  onSortModeChange: (value: SortMode) => void;
+  onToggleTargeted: (card: CrownZenithCard) => void;
   search: string;
   soldComps: Record<string, SoldComps>;
+  sortMode: SortMode;
+  targetedIds: string[];
   totalCards: number;
 }) {
   return (
@@ -367,9 +463,15 @@ function CrownZenithBrowser({
         <div>
           <div className="section-title">
             <Search size={18} />
-            <h2>Crown Zenith watchlist</h2>
+            <h2>{isTargetedView ? "Targeted cards" : "Crown Zenith watchlist"}</h2>
           </div>
-          <small>{loading ? "Building the set watchlist..." : `${cards.length} of ${totalCards} cards in view`}</small>
+          <small>
+            {loading
+              ? "Building the set watchlist..."
+              : isTargetedView
+                ? `${cards.length} saved targets`
+                : `${cards.length} of ${totalCards} cards in view`}
+          </small>
         </div>
         <label className="search-field" aria-label="Search Crown Zenith cards">
           <Search size={16} />
@@ -386,6 +488,27 @@ function CrownZenithBrowser({
         </button>
       </div>
 
+      <div className="control-strip">
+        <label>
+          Grade profile
+          <select value={gradeProfile} onChange={(event) => onGradeProfileChange(event.target.value as GradeProfile)}>
+            {gradeProfiles.map((grade) => (
+              <option key={grade}>{grade}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Sort cards
+          <select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as SortMode)}>
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       {error && <p className="empty-state">Crown Zenith data is unavailable right now: {error}</p>}
       {loading && (
         <div className="loading-state">
@@ -399,11 +522,20 @@ function CrownZenithBrowser({
           {cards.map((card) => (
             <CrownCardRow
               card={card}
+              fxUsdToGbp={fxUsdToGbp}
+              gradeProfile={gradeProfile}
+              isTargeted={targetedIds.includes(card.id)}
               key={card.id}
               onLoadSoldComps={onLoadSoldComps}
+              onToggleTargeted={onToggleTargeted}
               sold={soldComps[card.id]}
             />
           ))}
+          {!cards.length && !loading && (
+            <p className="empty-state">
+              {isTargetedView ? "No cards saved yet. Add targets from the Crown watchlist." : "No cards match this search."}
+            </p>
+          )}
         </div>
       )}
     </>
@@ -412,15 +544,25 @@ function CrownZenithBrowser({
 
 function CrownCardRow({
   card,
+  fxUsdToGbp,
+  gradeProfile,
+  isTargeted,
   onLoadSoldComps,
+  onToggleTargeted,
   sold
 }: {
   card: CrownZenithCard;
+  fxUsdToGbp: number;
+  gradeProfile: GradeProfile;
+  isTargeted: boolean;
   onLoadSoldComps: (card: CrownZenithCard) => void;
+  onToggleTargeted: (card: CrownZenithCard) => void;
   sold?: SoldComps;
 }) {
   const tcgMarket = getTcgMarket(card);
   const cardmarket = card.cardmarket?.prices?.averageSellPrice;
+  const margin = getUsUkMargin(sold, fxUsdToGbp);
+  const query = buildCardQuery(card.name, gradeProfile);
 
   return (
     <article className="crown-card">
@@ -434,6 +576,7 @@ function CrownCardRow({
             #{card.number} / {card.rarity ?? "Unknown rarity"}
           </small>
           <div className="pill-row compact">
+            <span>{gradeProfile}</span>
             <span>TCGPlayer {tcgMarket ? formatCurrency(tcgMarket, "USD") : "n/a"}</span>
             <span>Cardmarket {cardmarket ? formatCurrency(cardmarket, "EUR") : "n/a"}</span>
           </div>
@@ -449,18 +592,25 @@ function CrownCardRow({
           <strong>UK avg</strong>
           <span>{formatSoldAverage(sold?.UK)}</span>
         </div>
-        <a href={ebaySearchUrl(card.name, "US")} rel="noreferrer" target="_blank">
+        <div className={margin && margin.value >= 0 ? "comp-summary margin-positive" : "comp-summary"}>
+          <strong>Margin</strong>
+          <span>{margin ? `${formatMoney(margin.value)} / ${formatPercent(margin.percent)}` : "Load comps"}</span>
+        </div>
+        <a href={ebaySearchUrl(query, "US")} rel="noreferrer" target="_blank">
           US active <ExternalLink size={14} />
         </a>
-        <a href={ebaySearchUrl(card.name, "UK")} rel="noreferrer" target="_blank">
+        <a href={ebaySearchUrl(query, "UK")} rel="noreferrer" target="_blank">
           UK active <ExternalLink size={14} />
         </a>
-        <a href={ebaySoldUrl(card.name, "US")} rel="noreferrer" target="_blank">
+        <a href={ebaySoldUrl(query, "US")} rel="noreferrer" target="_blank">
           US sold <ExternalLink size={14} />
         </a>
-        <a href={ebaySoldUrl(card.name, "UK")} rel="noreferrer" target="_blank">
+        <a href={ebaySoldUrl(query, "UK")} rel="noreferrer" target="_blank">
           UK sold <ExternalLink size={14} />
         </a>
+        <button className={isTargeted ? "target-button saved" : "target-button"} onClick={() => onToggleTargeted(card)} type="button">
+          {isTargeted ? "Saved" : "Target"}
+        </button>
         <button disabled={sold?.loading} onClick={() => onLoadSoldComps(card)} type="button">
           {sold?.loading ? <Loader2 size={14} /> : <RefreshCcw size={14} />}
           Get last 3
@@ -517,6 +667,62 @@ function getTcgMarket(card: CrownZenithCard) {
   }
 
   return null;
+}
+
+function buildCardQuery(cardName: string, gradeProfile: GradeProfile) {
+  return gradeProfile === "Raw" ? cardName : `${cardName} ${gradeProfile}`;
+}
+
+function getUsUkMargin(sold: SoldComps | undefined, fxUsdToGbp: number) {
+  if (!sold?.US?.average || !sold.UK?.average) return null;
+
+  const usAverageGbp = sold.US.average * fxUsdToGbp;
+  const ukAverageGbp = sold.UK.average;
+  const value = ukAverageGbp - usAverageGbp;
+  const percent = usAverageGbp > 0 ? (value / usAverageGbp) * 100 : 0;
+
+  return {
+    percent,
+    value
+  };
+}
+
+function sortCards(
+  cards: CrownZenithCard[],
+  sortMode: SortMode,
+  soldComps: Record<string, SoldComps>,
+  fxUsdToGbp: number,
+  gradeProfile: GradeProfile
+) {
+  const sorted = [...cards];
+
+  sorted.sort((a, b) => {
+    if (sortMode === "priceHigh") return getCardPriceEstimate(b) - getCardPriceEstimate(a);
+    if (sortMode === "priceLow") return getCardPriceEstimate(a) - getCardPriceEstimate(b);
+    if (sortMode === "biggestMargin") {
+      const marginA = getUsUkMargin(soldComps[a.id], fxUsdToGbp)?.value ?? Number.NEGATIVE_INFINITY;
+      const marginB = getUsUkMargin(soldComps[b.id], fxUsdToGbp)?.value ?? Number.NEGATIVE_INFINITY;
+      return marginB - marginA;
+    }
+    if (sortMode === "gradeHigh") {
+      const gradeBoost = getGradeScore(gradeProfile);
+      return getCardPriceEstimate(b) * gradeBoost - getCardPriceEstimate(a) * gradeBoost;
+    }
+
+    return Number(a.number.replace(/\D/g, "")) - Number(b.number.replace(/\D/g, ""));
+  });
+
+  return sorted;
+}
+
+function getCardPriceEstimate(card: CrownZenithCard) {
+  return getTcgMarket(card) ?? card.cardmarket?.prices?.averageSellPrice ?? 0;
+}
+
+function getGradeScore(gradeProfile: GradeProfile) {
+  if (gradeProfile.endsWith("10")) return 10;
+  if (gradeProfile.endsWith("9")) return 9;
+  return 0;
 }
 
 function formatCurrency(value: number, currency: "GBP" | "USD" | "EUR") {

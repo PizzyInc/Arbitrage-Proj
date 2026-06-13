@@ -191,6 +191,13 @@ td small,
   width: 100%;
 }
 
+.control-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  margin-top: 16px;
+}
+
 .workspace {
   display: grid;
   gap: 18px;
@@ -477,6 +484,14 @@ tbody tr:hover,
   font-weight: 800;
 }
 
+.margin-positive {
+  border-color: #285942;
+}
+
+.margin-positive span {
+  color: var(--green);
+}
+
 .market-actions a,
 .market-actions button,
 .sold-panel a {
@@ -501,6 +516,15 @@ tbody tr:hover,
 
 .market-actions button {
   color: var(--green);
+}
+
+.target-button {
+  color: var(--yellow) !important;
+}
+
+.target-button.saved {
+  background: #201b0d;
+  border-color: #6d5615;
 }
 
 .market-actions button:disabled {
@@ -749,7 +773,7 @@ code {
   }
 
   .nav-list {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
   }
 
   .nav-item {
@@ -796,7 +820,8 @@ code {
   }
 
   .search-field,
-  .sold-comps {
+  .sold-comps,
+  .control-strip {
     grid-template-columns: 1fr;
     width: 100%;
   }
