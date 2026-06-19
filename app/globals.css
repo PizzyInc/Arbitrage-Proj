@@ -49,7 +49,7 @@ textarea {
 .app-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   min-height: 100vh;
 }
 
@@ -63,6 +63,32 @@ textarea {
   padding: 12px;
   align-items: center;
   justify-content: center;
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 60px;
+  height: 60px;
+  z-index: 1000;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+  display: block;
 }
 
 .sidebar {
@@ -943,39 +969,53 @@ code {
 
 @media (max-width: 900px) {
   .app-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
+    grid-template-columns: 60px 1fr;
+    grid-template-rows: 1fr;
   }
 
   .mobile-nav-toggle {
     display: flex;
-    grid-column: 1;
+    position: static;
+    width: auto;
+    height: auto;
+    border-bottom: none;
+    border-right: 1px solid var(--line);
+    z-index: auto;
     background: var(--panel);
-    border-bottom: 1px solid var(--line);
+    padding: 12px;
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .sidebar {
     grid-column: 1;
-    max-height: 0;
-    overflow: hidden;
+    grid-row: 1;
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 260px;
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    margin-left: -260px;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 999;
     border-right: 1px solid var(--line);
-    border-bottom: 0;
-    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
-    padding: 0 22px;
+    border-bottom: none;
   }
 
   .sidebar.open {
-    max-height: 500px;
-    padding: 22px;
-    border-bottom: 1px solid var(--line);
+    margin-left: 0;
   }
 
   .workspace {
-    grid-column: 1;
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .filters-panel {
-    sticky: false;
+    position: sticky;
+    top: 0;
   }
 
   .metric-grid {
@@ -984,8 +1024,12 @@ code {
 }
 
 @media (max-width: 760px) {
-  .workspace,
   .sidebar {
+    width: 240px;
+    padding: 16px;
+  }
+
+  .workspace {
     padding: 16px;
   }
 
@@ -1072,8 +1116,22 @@ code {
     font-size: 14px;
   }
 
-  .workspace,
+  .app-shell {
+    grid-template-columns: 50px 1fr;
+  }
+
+  .mobile-nav-toggle {
+    width: 50px;
+    height: 50px;
+    padding: 10px;
+  }
+
   .sidebar {
+    width: 200px;
+    padding: 12px;
+  }
+
+  .workspace {
     padding: 12px;
   }
 

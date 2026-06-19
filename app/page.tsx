@@ -315,6 +315,12 @@ export default function Home() {
         </div>
       </aside>
 
+      <div
+        className={`sidebar-overlay ${mobileMenuOpen ? "active" : ""}`}
+        onClick={() => setMobileMenuOpen(false)}
+        role="presentation"
+      />
+
       <section className="workspace">
         <header className="topbar">
           <div>
