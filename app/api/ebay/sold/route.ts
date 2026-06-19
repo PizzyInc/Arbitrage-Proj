@@ -6,6 +6,19 @@ const MARKET_CURRENCY = {
   US: "USD"
 } as const;
 
+// Rotate user agents to reduce blocking
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0"
+];
+
+function getRandomUserAgent(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
 function decodeHtml(value: string) {
   return value
     .replace(/&amp;/g, "&")
@@ -65,14 +78,38 @@ export async function GET(request: Request) {
   try {
     const response = await fetch(sourceUrl, {
       headers: {
+        "User-Agent": getRandomUserAgent(),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": market === "UK" ? "en-GB,en;q=0.9" : "en-US,en;q=0.9",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": market === "UK" ? "https://www.ebay.co.uk/" : "https://www.ebay.com/",
+        "DNT": "1",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Cache-Control": "max-age=0"
       },
       next: {
         revalidate: 900
       }
     });
+
+    if (response.status === 403) {
+      return NextResponse.json(
+        {
+          average: null,
+          currency: MARKET_CURRENCY[market],
+          market,
+          query,
+          sales: [],
+          sourceUrl,
+          warning: "eBay blocked this request (403). Please open the link directly to view sold listings and search for comps manually."
+        },
+        { status: 200 }
+      );
+    }
 
     if (!response.ok) {
       return NextResponse.json(
@@ -104,7 +141,7 @@ export async function GET(request: Request) {
       sourceUrl,
       warning: sales.length ? undefined : "No sold items could be parsed from eBay. Open the sold-search link for live results."
     });
-  } catch {
+  } catch (error) {
     return NextResponse.json({
       average: null,
       currency: MARKET_CURRENCY[market],
@@ -112,7 +149,7 @@ export async function GET(request: Request) {
       query,
       sales: [],
       sourceUrl,
-      warning: "Could not fetch eBay sold results from the server. Open the sold-search link for live results."
+      warning: `Could not fetch eBay sold results: ${error instanceof Error ? error.message : "Unknown error"}. Open the sold-search link for live results.`
     });
   }
 }

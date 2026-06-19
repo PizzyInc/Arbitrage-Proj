@@ -48,6 +48,7 @@ type CrownZenithCard = {
   id: string;
   name: string;
   number: string;
+  subset?: string;
   rarity?: string;
   images?: {
     small?: string;
@@ -73,6 +74,7 @@ const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
 ];
 
 const sets = ["All sets", "Crown Zenith", "Obsidian Flames", "Pokemon x Van Gogh", "Evolving Skies"];
+const crownZenithSubsets = ["All subsets", "Base Set", "Galarian Gallery"];
 const rarities: Array<Rarity | "All rarity"> = ["All rarity", "V", "EX", "Full Art", "Secret Rare", "Alt Art", "Promo"];
 const gradeProfiles: GradeProfile[] = ["Raw", "PSA 10", "PSA 9", "CGC 10", "CGC 9", "ACE 10", "ACE 9"];
 const sortOptions: Array<{ label: string; value: SortMode }> = [
@@ -95,6 +97,7 @@ export default function Home() {
   const [sortMode, setSortMode] = useState<SortMode>("number");
   const [targetedIds, setTargetedIds] = useState<string[]>([]);
   const [setFilter, setSetFilter] = useState("All sets");
+  const [subsetFilter, setSubsetFilter] = useState("All subsets");
   const [rarityFilter, setRarityFilter] = useState<Rarity | "All rarity">("All rarity");
   const [minRoi, setMinRoi] = useState(10);
   const [maxPrice, setMaxPrice] = useState(1500);
@@ -124,13 +127,19 @@ export default function Home() {
   const searchedCrownCards = useMemo(
     () =>
       sortCards(
-        crownCards.filter((card) => card.name.toLowerCase().includes(cardSearch.trim().toLowerCase())),
+        crownCards.filter((card) => {
+          const nameMatch = card.name.toLowerCase().includes(cardSearch.trim().toLowerCase());
+          const subsetMatch = setFilter === "Crown Zenith" 
+            ? (subsetFilter === "All subsets" || card.subset === subsetFilter.replace(" ", ""))
+            : true;
+          return nameMatch && subsetMatch;
+        }),
         sortMode,
         soldComps,
         settings.fxUsdToGbp,
         gradeProfile
       ),
-    [cardSearch, crownCards, gradeProfile, settings.fxUsdToGbp, soldComps, sortMode]
+    [cardSearch, crownCards, gradeProfile, settings.fxUsdToGbp, soldComps, sortMode, subsetFilter, setFilter]
   );
   const targetedCards = useMemo(
     () =>
@@ -181,6 +190,12 @@ export default function Home() {
   useEffect(() => {
     window.localStorage.setItem("arbicards-targeted", JSON.stringify(targetedIds));
   }, [targetedIds]);
+
+  useEffect(() => {
+    if (setFilter !== "Crown Zenith") {
+      setSubsetFilter("All subsets");
+    }
+  }, [setFilter]);
 
   async function loadSoldComps(card: CrownZenithCard) {
     setSoldComps((current) => ({
@@ -319,6 +334,17 @@ export default function Home() {
                 ))}
               </select>
             </label>
+
+            {setFilter === "Crown Zenith" && (
+              <label>
+                Subset
+                <select value={subsetFilter} onChange={(event) => setSubsetFilter(event.target.value)}>
+                  {crownZenithSubsets.map((subset) => (
+                    <option key={subset}>{subset}</option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label>
               Rarity

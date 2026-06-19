@@ -6,6 +6,7 @@ export type MarketListing = {
   id: string;
   cardName: string;
   set: string;
+  subset?: string;
   rarity: Rarity;
   region: Region;
   marketplace: "eBay US" | "eBay UK";
@@ -30,6 +31,7 @@ export type Opportunity = {
   id: string;
   cardName: string;
   set: string;
+  subset?: string;
   rarity: Rarity;
   condition: Condition;
   buyMarket: MarketListing;
