@@ -10,6 +10,8 @@ import {
   Gauge,
   LineChart,
   Loader2,
+  Menu,
+  X,
   RefreshCcw,
   Search,
   Settings2,
@@ -104,6 +106,7 @@ export default function Home() {
   const [minVolume, setMinVolume] = useState(10);
   const [settings, setSettings] = useState(defaultCostSettings);
   const [lastRefresh, setLastRefresh] = useState("26 May 2026, 11:42");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const opportunities = useMemo(() => buildOpportunities(settings), [settings]);
   const filtered = opportunities.filter((opportunity) => {
@@ -254,7 +257,16 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
+      <button
+        className="mobile-nav-toggle"
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+        type="button"
+      >
+        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
+
+      <aside className={`sidebar ${mobileMenuOpen ? "open" : ""}`}>
         <div className="brand">
           <span className="brand-mark">A</span>
           <div>
@@ -270,7 +282,10 @@ export default function Home() {
               <button
                 className={activeTab === tab.id ? "nav-item active" : "nav-item"}
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setMobileMenuOpen(false);
+                }}
                 type="button"
                 title={tab.label}
               >
