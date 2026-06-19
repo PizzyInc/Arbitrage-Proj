@@ -14,9 +14,10 @@ import {
   X,
   RefreshCcw,
   Search,
-  Settings2,
-  ShieldCheck,
   SlidersHorizontal,
+  Check,
+  ChevronDown,
+  Bookmark,
   Target,
   TrendingUp
 } from "lucide-react";
@@ -29,7 +30,6 @@ import {
   liveMarketplaceListings,
   Opportunity,
   portfolio,
-  Rarity
 } from "@/lib/arbitrage";
 import { EbayMarket, EbaySoldResponse, ebaySearchUrl, ebaySoldUrl } from "@/lib/ebay";
 
@@ -50,19 +50,23 @@ type CrownZenithCard = {
   id: string;
   name: string;
   number: string;
-  subset?: string;
+  subset: "base" | "galarian-gallery";
+  subsetLabel: "Base Set" | "Galarian Gallery";
+  setTotal: number;
   rarity?: string;
-  images?: {
-    small?: string;
-  };
-  tcgplayer?: {
-    prices?: Record<string, { market?: number }>;
-  };
-  cardmarket?: {
-    prices?: {
-      averageSellPrice?: number;
-    };
-  };
+  images?: { small?: string; large?: string };
+  tcgplayer?: { prices?: Record<string, { market?: number; mid?: number }> };
+  cardmarket?: { prices?: { averageSellPrice?: number; trendPrice?: number } };
+};
+
+type CrownMetadata = {
+  complete: boolean;
+  expectedTotal: number;
+  rarities: string[];
+  series: string;
+  set: string;
+  subsets: Array<{ id: "base" | "galarian-gallery"; label: string; total: number }>;
+  total: number;
 };
 
 const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
@@ -75,9 +79,7 @@ const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
   { id: "portfolio", label: "PnL", icon: BriefcaseBusiness }
 ];
 
-const sets = ["All sets", "Crown Zenith", "Obsidian Flames", "Pokemon x Van Gogh", "Evolving Skies"];
-const crownZenithSubsets = ["All subsets", "Base Set", "Galarian Gallery"];
-const rarities: Array<Rarity | "All rarity"> = ["All rarity", "V", "EX", "Full Art", "Secret Rare", "Alt Art", "Promo"];
+const crownZenithSubsets = [{ id: "all", label: "All cards", total: 230 }, { id: "base", label: "Base Set", total: 160 }, { id: "galarian-gallery", label: "Galarian Gallery", total: 70 }] as const;
 const gradeProfiles: GradeProfile[] = ["Raw", "PSA 10", "PSA 9", "CGC 10", "CGC 9", "ACE 10", "ACE 9"];
 const sortOptions: Array<{ label: string; value: SortMode }> = [
   { label: "Set number", value: "number" },
@@ -94,24 +96,25 @@ export default function Home() {
   const [crownCards, setCrownCards] = useState<CrownZenithCard[]>([]);
   const [crownError, setCrownError] = useState("");
   const [crownLoading, setCrownLoading] = useState(true);
+  const [crownMetadata, setCrownMetadata] = useState<CrownMetadata | null>(null);
   const [soldComps, setSoldComps] = useState<Record<string, SoldComps>>({});
   const [gradeProfile, setGradeProfile] = useState<GradeProfile>("Raw");
   const [sortMode, setSortMode] = useState<SortMode>("number");
   const [targetedIds, setTargetedIds] = useState<string[]>([]);
-  const [setFilter, setSetFilter] = useState("All sets");
-  const [subsetFilter, setSubsetFilter] = useState("All subsets");
-  const [rarityFilter, setRarityFilter] = useState<Rarity | "All rarity">("All rarity");
+  const [subsetFilter, setSubsetFilter] = useState<"all" | "base" | "galarian-gallery">("all");
+  const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
+  const [rarityMenuOpen, setRarityMenuOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [minRoi, setMinRoi] = useState(10);
   const [maxPrice, setMaxPrice] = useState(1500);
   const [minVolume, setMinVolume] = useState(10);
   const [settings, setSettings] = useState(defaultCostSettings);
-  const [lastRefresh, setLastRefresh] = useState("26 May 2026, 11:42");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const opportunities = useMemo(() => buildOpportunities(settings), [settings]);
   const filtered = opportunities.filter((opportunity) => {
-    const setMatch = setFilter === "All sets" || opportunity.set === setFilter;
-    const rarityMatch = rarityFilter === "All rarity" || opportunity.rarity === rarityFilter;
+    const setMatch = opportunity.set === "Crown Zenith";
+    const rarityMatch = selectedRarities.length === 0 || selectedRarities.includes(opportunity.rarity);
     return (
       setMatch &&
       rarityMatch &&
@@ -127,47 +130,33 @@ export default function Home() {
     : 0;
   const portfolioValue = portfolio.reduce((sum, item) => sum + item.marketValueGbp, 0);
   const portfolioCost = portfolio.reduce((sum, item) => sum + item.costGbp, 0);
+  const filterCard = (card: CrownZenithCard) => {
+    const nameMatch = card.name.toLowerCase().includes(cardSearch.trim().toLowerCase());
+    const subsetMatch = subsetFilter === "all" || card.subset === subsetFilter;
+    const rarityMatch = selectedRarities.length === 0 || (card.rarity ? selectedRarities.includes(card.rarity) : false);
+    return nameMatch && subsetMatch && rarityMatch;
+  };
   const searchedCrownCards = useMemo(
-    () =>
-      sortCards(
-        crownCards.filter((card) => {
-          const nameMatch = card.name.toLowerCase().includes(cardSearch.trim().toLowerCase());
-          const subsetMatch = setFilter === "Crown Zenith" 
-            ? (subsetFilter === "All subsets" || card.subset === subsetFilter.replace(" ", ""))
-            : true;
-          return nameMatch && subsetMatch;
-        }),
-        sortMode,
-        soldComps,
-        settings.fxUsdToGbp,
-        gradeProfile
-      ),
-    [cardSearch, crownCards, gradeProfile, settings.fxUsdToGbp, soldComps, sortMode, subsetFilter, setFilter]
+    () => sortCards(crownCards.filter(filterCard), sortMode, soldComps, settings.fxUsdToGbp, gradeProfile),
+    [cardSearch, crownCards, gradeProfile, selectedRarities, settings.fxUsdToGbp, soldComps, sortMode, subsetFilter]
   );
   const targetedCards = useMemo(
-    () =>
-      sortCards(
-        crownCards.filter((card) => targetedIds.includes(card.id)),
-        sortMode,
-        soldComps,
-        settings.fxUsdToGbp,
-        gradeProfile
-      ),
-    [crownCards, gradeProfile, settings.fxUsdToGbp, soldComps, sortMode, targetedIds]
+    () => sortCards(crownCards.filter((card) => targetedIds.includes(card.id) && filterCard(card)), sortMode, soldComps, settings.fxUsdToGbp, gradeProfile),
+    [cardSearch, crownCards, gradeProfile, selectedRarities, settings.fxUsdToGbp, soldComps, sortMode, subsetFilter, targetedIds]
   );
-
   useEffect(() => {
     let mounted = true;
 
     fetch("/api/cards/crown-zenith")
       .then((response) => {
         if (!response.ok) throw new Error(`Card API returned ${response.status}`);
-        return response.json() as Promise<{ data: CrownZenithCard[]; error?: string }>;
+        return response.json() as Promise<{ data: CrownZenithCard[]; error?: string; metadata?: CrownMetadata }>;
       })
       .then((payload) => {
         if (!mounted) return;
         if (payload.error) throw new Error(payload.error);
         setCrownCards(payload.data ?? []);
+        setCrownMetadata(payload.metadata ?? null);
         setCrownError("");
       })
       .catch((error: Error) => {
@@ -193,12 +182,6 @@ export default function Home() {
   useEffect(() => {
     window.localStorage.setItem("arbicards-targeted", JSON.stringify(targetedIds));
   }, [targetedIds]);
-
-  useEffect(() => {
-    if (setFilter !== "Crown Zenith") {
-      setSubsetFilter("All subsets");
-    }
-  }, [setFilter]);
 
   async function loadSoldComps(card: CrownZenithCard) {
     setSoldComps((current) => ({
@@ -244,216 +227,121 @@ export default function Home() {
   }
 
   function refreshData() {
-    setLastRefresh(
-      new Intl.DateTimeFormat("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      }).format(new Date())
-    );
+    window.location.reload();
   }
 
   return (
     <main className="app-shell">
-      <button
-        className="mobile-nav-toggle"
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-        type="button"
-      >
-        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+      <header className="mobile-app-header">
+        <button className="icon-button" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu" type="button">
+          <Menu size={21} />
+        </button>
+        <div className="mobile-brand">
+          <span className="brand-mark">A</span>
+          <div><strong>ArbiCards</strong><small>Crown Zenith</small></div>
+        </div>
+        <button className="icon-button" onClick={refreshData} aria-label="Sync market data" type="button">
+          <RefreshCcw size={19} />
+        </button>
+      </header>
 
       <aside className={`sidebar ${mobileMenuOpen ? "open" : ""}`}>
-        <div className="brand">
-          <span className="brand-mark">A</span>
-          <div>
-            <strong>ArbiCards</strong>
-            <small>Card market intelligence</small>
+        <div className="sidebar-head">
+          <div className="brand">
+            <span className="brand-mark">A</span>
+            <div><strong>ArbiCards</strong><small>Card market intelligence</small></div>
           </div>
+          <button className="sidebar-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" type="button"><X size={20} /></button>
         </div>
-
         <nav className="nav-list" aria-label="Dashboard sections">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
-                className={activeTab === tab.id ? "nav-item active" : "nav-item"}
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setMobileMenuOpen(false);
-                }}
-                type="button"
-                title={tab.label}
-              >
-                <Icon size={18} />
-                <span>{tab.label}</span>
+              <button className={activeTab === tab.id ? "nav-item active" : "nav-item"} key={tab.id} onClick={() => { setActiveTab(tab.id); setMobileMenuOpen(false); }} type="button">
+                <Icon size={18} /><span>{tab.label}</span>
+                {tab.id === "targeted" && targetedIds.length > 0 && <b>{targetedIds.length}</b>}
               </button>
             );
           })}
         </nav>
-
         <div className="sidebar-panel">
-          <span className="panel-label">Alert channels</span>
-          <div className="status-row">
-            <Bot size={18} />
-            <div>
-              <strong>Telegram signals</strong>
-              <small>Route high-value spreads to chat</small>
-            </div>
-          </div>
-          <div className="status-row">
-            <ShieldCheck size={18} />
-            <div>
-              <strong>Push ready</strong>
-              <small>Install the app for phone alerts</small>
-            </div>
-          </div>
+          <span className="panel-label">Crown Zenith checklist</span>
+          <div className="checklist-mini"><strong>{crownMetadata?.total ?? crownCards.length}/230</strong><span>cards loaded</span></div>
+          <div className="checklist-bar"><i style={{ width: `${Math.min(100, ((crownMetadata?.total ?? crownCards.length) / 230) * 100)}%` }} /></div>
+          <small>160 Base Set + 70 Galarian Gallery</small>
         </div>
       </aside>
 
-      <div
-        className={`sidebar-overlay ${mobileMenuOpen ? "active" : ""}`}
-        onClick={() => setMobileMenuOpen(false)}
-        role="presentation"
-      />
+      <button className={`sidebar-overlay ${mobileMenuOpen ? "active" : ""}`} onClick={() => setMobileMenuOpen(false)} aria-label="Close menu overlay" type="button" />
 
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Pokemon card market intelligence</p>
-            <h1>Find underpriced Crown Zenith cards before the spread closes</h1>
+            <p className="eyebrow">Sword & Shield series</p>
+            <h1>Crown Zenith market workspace</h1>
+            <p className="topbar-subtitle">Compare prices, track the full 230-card checklist, and save targets.</p>
           </div>
-          <button className="primary-button" onClick={refreshData} type="button">
-            <RefreshCcw size={17} />
-            Sync market view
-          </button>
+          <button className="primary-button" onClick={refreshData} type="button"><RefreshCcw size={16} /><span>Sync</span></button>
         </header>
 
-        <section className="metric-grid" aria-label="Summary metrics">
-          <Metric icon={Search} label="Set coverage" value={String(crownCards.length || "...")} detail="Crown Zenith cards tracked" />
-          <Metric icon={TrendingUp} label="Opportunity value" value={formatMoney(totalProfit)} detail="Modeled profit after costs" />
-          <Metric icon={Gauge} label="Avg signal ROI" value={formatPercent(averageRoi)} detail="Current filtered opportunities" />
-          <Metric icon={Clock3} label="Last synced" value={lastRefresh} detail="Manual market refresh" />
+        <section className="metric-grid compact-metrics" aria-label="Crown Zenith summary">
+          <Metric icon={Check} label="Checklist" value={`${crownMetadata?.total ?? crownCards.length}/230`} detail={crownMetadata?.complete ? "Complete set loaded" : "Loading set data"} />
+          <Metric icon={Search} label="Base Set" value={String(crownCards.filter((card) => card.subset === "base").length)} detail="of 160 cards" />
+          <Metric icon={TrendingUp} label="Galarian Gallery" value={String(crownCards.filter((card) => card.subset === "galarian-gallery").length)} detail="of 70 cards" />
+          <Metric icon={Bookmark} label="Targeted" value={String(targetedIds.length)} detail="saved cards" />
         </section>
 
-        <div className="content-grid">
-          <aside className="filters-panel">
-            <div className="section-title">
-              <SlidersHorizontal size={18} />
-              <h2>Opportunity filters</h2>
-            </div>
-
-            <label>
-              Set
-              <select value={setFilter} onChange={(event) => setSetFilter(event.target.value)}>
-                {sets.map((set) => (
-                  <option key={set}>{set}</option>
-                ))}
-              </select>
-            </label>
-
-            {setFilter === "Crown Zenith" && (
-              <label>
-                Subset
-                <select value={subsetFilter} onChange={(event) => setSubsetFilter(event.target.value)}>
-                  {crownZenithSubsets.map((subset) => (
-                    <option key={subset}>{subset}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            <label>
-              Rarity
-              <select value={rarityFilter} onChange={(event) => setRarityFilter(event.target.value as Rarity | "All rarity")}>
-                {rarities.map((rarity) => (
-                  <option key={rarity}>{rarity}</option>
-                ))}
-              </select>
-            </label>
-
-            <RangeControl label="Minimum ROI" value={minRoi} min={0} max={45} suffix="%" onChange={setMinRoi} />
-            <RangeControl label="Max resale price" value={maxPrice} min={50} max={1800} prefix="£" onChange={setMaxPrice} />
-            <RangeControl label="Min liquidity" value={minVolume} min={0} max={90} suffix=" sales" onChange={setMinVolume} />
-
-            <div className="section-title cost-heading">
-              <Settings2 size={18} />
-              <h2>Cost assumptions</h2>
-            </div>
-            <NumberControl label="FX USD to GBP" value={settings.fxUsdToGbp} step={0.01} onChange={(fxUsdToGbp) => setSettings({ ...settings, fxUsdToGbp })} />
-            <NumberControl label="eBay fee %" value={settings.ebayFeePct} step={0.1} onChange={(ebayFeePct) => setSettings({ ...settings, ebayFeePct })} />
-            <NumberControl label="Shipping GBP" value={settings.shippingGbp} step={1} onChange={(shippingGbp) => setSettings({ ...settings, shippingGbp })} />
-            <NumberControl label="Import duty %" value={settings.importDutyPct} step={0.1} onChange={(importDutyPct) => setSettings({ ...settings, importDutyPct })} />
-          </aside>
-
-          <section className="main-panel">
-            {activeTab === "crown" && (
-              <CrownZenithBrowser
-                cards={searchedCrownCards}
-                error={crownError}
-                gradeProfile={gradeProfile}
-                isTargetedView={false}
-                loading={crownLoading}
-                onLoadVisibleSoldComps={loadVisibleSoldComps}
-                onLoadSoldComps={loadSoldComps}
-                onGradeProfileChange={setGradeProfile}
-                search={cardSearch}
-                soldComps={soldComps}
-                sortMode={sortMode}
-                targetedIds={targetedIds}
-                totalCards={crownCards.length}
-                onSearch={setCardSearch}
-                onSortModeChange={setSortMode}
-                onToggleTargeted={toggleTargeted}
-                fxUsdToGbp={settings.fxUsdToGbp}
-              />
-            )}
-            {activeTab === "targeted" && (
-              <CrownZenithBrowser
-                cards={targetedCards}
-                error={crownError}
-                gradeProfile={gradeProfile}
-                isTargetedView
-                loading={crownLoading}
-                onLoadVisibleSoldComps={loadVisibleSoldComps}
-                onLoadSoldComps={loadSoldComps}
-                onGradeProfileChange={setGradeProfile}
-                search={cardSearch}
-                soldComps={soldComps}
-                sortMode={sortMode}
-                targetedIds={targetedIds}
-                totalCards={targetedIds.length}
-                onSearch={setCardSearch}
-                onSortModeChange={setSortMode}
-                onToggleTargeted={toggleTargeted}
-                fxUsdToGbp={settings.fxUsdToGbp}
-              />
-            )}
-            {activeTab === "feed" && (
-              <OpportunityFeed
-                opportunities={filtered}
-                selected={selected}
-                onSelect={(opportunity) => {
-                  setSelectedId(opportunity.id);
-                  setActiveTab("detail");
-                }}
-              />
-            )}
-            {activeTab === "detail" && selected && <CardDetail opportunity={selected} />}
-            {activeTab === "marketplaces" && <MarketplaceListings />}
-            {activeTab === "alerts" && <AlertsDashboard selected={selected} />}
-            {activeTab === "portfolio" && (
-              <PortfolioPanel portfolioCost={portfolioCost} portfolioValue={portfolioValue} />
-            )}
-          </section>
-        </div>
+        <section className="main-panel">
+          {(activeTab === "crown" || activeTab === "targeted") && (
+            <CrownZenithBrowser
+              cards={activeTab === "targeted" ? targetedCards : searchedCrownCards}
+              error={crownError}
+              filtersOpen={filtersOpen}
+              fxUsdToGbp={settings.fxUsdToGbp}
+              gradeProfile={gradeProfile}
+              isTargetedView={activeTab === "targeted"}
+              loading={crownLoading}
+              metadata={crownMetadata}
+              onGradeProfileChange={setGradeProfile}
+              onLoadVisibleSoldComps={loadVisibleSoldComps}
+              onLoadSoldComps={loadSoldComps}
+              onRarityMenuChange={setRarityMenuOpen}
+              onSearch={setCardSearch}
+              onSelectedRaritiesChange={setSelectedRarities}
+              onSortModeChange={setSortMode}
+              onSubsetChange={setSubsetFilter}
+              onToggleFilters={() => setFiltersOpen((value) => !value)}
+              onToggleTargeted={toggleTargeted}
+              rarityMenuOpen={rarityMenuOpen}
+              search={cardSearch}
+              selectedRarities={selectedRarities}
+              soldComps={soldComps}
+              sortMode={sortMode}
+              subsetFilter={subsetFilter}
+              targetedIds={targetedIds}
+              totalCards={activeTab === "targeted" ? targetedIds.length : crownCards.length}
+            />
+          )}
+          {activeTab === "feed" && <OpportunityFeed opportunities={filtered} selected={selected} onSelect={(opportunity) => { setSelectedId(opportunity.id); setActiveTab("detail"); }} />}
+          {activeTab === "detail" && (selected ? <CardDetail opportunity={selected} /> : <EmptyPanel title="No card selected" body="Open an opportunity from the Feed to see its detail." />)}
+          {activeTab === "marketplaces" && <MarketplaceListings />}
+          {activeTab === "alerts" && <AlertsDashboard selected={selected} />}
+          {activeTab === "portfolio" && <PortfolioPanel portfolioCost={portfolioCost} portfolioValue={portfolioValue} />}
+        </section>
       </section>
+
+      <nav className="mobile-bottom-nav" aria-label="Primary navigation">
+        {tabs.filter((tab) => ["crown", "targeted", "alerts", "portfolio"].includes(tab.id)).map((tab) => {
+          const Icon = tab.icon;
+          return <button className={activeTab === tab.id ? "active" : ""} key={tab.id} onClick={() => setActiveTab(tab.id)} type="button"><Icon size={19} /><span>{tab.label}</span>{tab.id === "targeted" && targetedIds.length > 0 && <b>{targetedIds.length}</b>}</button>;
+        })}
+      </nav>
     </main>
   );
+}
+
+function EmptyPanel({ title, body }: { title: string; body: string }) {
+  return <div className="empty-panel"><Target size={22} /><strong>{title}</strong><p>{body}</p></div>;
 }
 
 function Metric({ icon: Icon, label, value, detail }: { icon: React.ElementType; label: string; value: string; detail: string }) {
@@ -468,210 +356,84 @@ function Metric({ icon: Icon, label, value, detail }: { icon: React.ElementType;
 }
 
 function CrownZenithBrowser({
-  cards,
-  error,
-  fxUsdToGbp,
-  gradeProfile,
-  isTargetedView,
-  loading,
-  onGradeProfileChange,
-  onLoadVisibleSoldComps,
-  onLoadSoldComps,
-  onSearch,
-  onSortModeChange,
-  onToggleTargeted,
-  search,
-  soldComps,
-  sortMode,
-  targetedIds,
-  totalCards
+  cards, error, filtersOpen, fxUsdToGbp, gradeProfile, isTargetedView, loading, metadata,
+  onGradeProfileChange, onLoadVisibleSoldComps, onLoadSoldComps, onRarityMenuChange, onSearch,
+  onSelectedRaritiesChange, onSortModeChange, onSubsetChange, onToggleFilters, onToggleTargeted,
+  rarityMenuOpen, search, selectedRarities, soldComps, sortMode, subsetFilter, targetedIds, totalCards
 }: {
-  cards: CrownZenithCard[];
-  error: string;
-  fxUsdToGbp: number;
-  gradeProfile: GradeProfile;
-  isTargetedView: boolean;
-  loading: boolean;
-  onGradeProfileChange: (value: GradeProfile) => void;
-  onLoadVisibleSoldComps: () => void;
-  onLoadSoldComps: (card: CrownZenithCard) => void;
-  onSearch: (value: string) => void;
+  cards: CrownZenithCard[]; error: string; filtersOpen: boolean; fxUsdToGbp: number;
+  gradeProfile: GradeProfile; isTargetedView: boolean; loading: boolean; metadata: CrownMetadata | null;
+  onGradeProfileChange: (value: GradeProfile) => void; onLoadVisibleSoldComps: () => void;
+  onLoadSoldComps: (card: CrownZenithCard) => void; onRarityMenuChange: (open: boolean) => void;
+  onSearch: (value: string) => void; onSelectedRaritiesChange: (values: string[]) => void;
   onSortModeChange: (value: SortMode) => void;
-  onToggleTargeted: (card: CrownZenithCard) => void;
-  search: string;
-  soldComps: Record<string, SoldComps>;
-  sortMode: SortMode;
-  targetedIds: string[];
-  totalCards: number;
+  onSubsetChange: (value: "all" | "base" | "galarian-gallery") => void;
+  onToggleFilters: () => void; onToggleTargeted: (card: CrownZenithCard) => void;
+  rarityMenuOpen: boolean; search: string; selectedRarities: string[];
+  soldComps: Record<string, SoldComps>; sortMode: SortMode;
+  subsetFilter: "all" | "base" | "galarian-gallery"; targetedIds: string[]; totalCards: number;
 }) {
+  const rarityOptions = metadata?.rarities ?? [];
   return (
-    <>
-      <div className="section-title split-title">
-        <div>
-          <div className="section-title">
-            <Search size={18} />
-            <h2>{isTargetedView ? "Targeted cards" : "Crown Zenith watchlist"}</h2>
-          </div>
-          <small>
-            {loading
-              ? "Building the set watchlist..."
-              : isTargetedView
-                ? `${cards.length} saved targets`
-                : `${cards.length} of ${totalCards} cards in view`}
-          </small>
-        </div>
-        <label className="search-field" aria-label="Search Crown Zenith cards">
-          <Search size={16} />
-          <input
-            placeholder="Search cards by name"
-            type="search"
-            value={search}
-            onChange={(event) => onSearch(event.target.value)}
-          />
-        </label>
-        <button className="secondary-button" disabled={loading || cards.length === 0} onClick={onLoadVisibleSoldComps} type="button">
-          <RefreshCcw size={15} />
-          Load comps for view
-        </button>
+    <div className="browser-view">
+      <div className="browser-heading">
+        <div><p className="eyebrow">{isTargetedView ? "Saved watchlist" : "Complete set checklist"}</p><h2>{isTargetedView ? "Targeted cards" : "Crown Zenith"}</h2><small>{loading ? "Loading cards..." : `${cards.length} shown � ${totalCards} total`}</small></div>
+        <button className={filtersOpen ? "filter-button active" : "filter-button"} onClick={onToggleFilters} type="button"><SlidersHorizontal size={16} /><span>Filters</span>{selectedRarities.length > 0 && <b>{selectedRarities.length}</b>}</button>
       </div>
 
-      <div className="control-strip">
-        <label>
-          Grade profile
-          <select value={gradeProfile} onChange={(event) => onGradeProfileChange(event.target.value as GradeProfile)}>
-            {gradeProfiles.map((grade) => (
-              <option key={grade}>{grade}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Sort cards
-          <select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as SortMode)}>
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="search-toolbar">
+        <label className="search-field" aria-label="Search Crown Zenith cards"><Search size={18} /><input placeholder="Search by card name or number" type="search" value={search} onChange={(event) => onSearch(event.target.value)} /></label>
+        <button className="secondary-button comps-button" disabled={loading || cards.length === 0} onClick={onLoadVisibleSoldComps} type="button"><RefreshCcw size={15} /><span>Load prices</span></button>
       </div>
 
-      {error && <p className="empty-state">Crown Zenith data is unavailable right now: {error}</p>}
-      {loading && (
-        <div className="loading-state">
-          <Loader2 size={18} />
-          <span>Pulling live Crown Zenith card data...</span>
-        </div>
-      )}
+      {!isTargetedView && <div className="subset-tabs" role="tablist" aria-label="Crown Zenith subsets">
+        {crownZenithSubsets.map((subset) => <button className={subsetFilter === subset.id ? "active" : ""} key={subset.id} onClick={() => onSubsetChange(subset.id)} type="button"><span>{subset.label}</span><b>{subset.total}</b></button>)}
+      </div>}
 
-      {!loading && !error && (
-        <div className="crown-grid">
-          {cards.map((card) => (
-            <CrownCardRow
-              card={card}
-              fxUsdToGbp={fxUsdToGbp}
-              gradeProfile={gradeProfile}
-              isTargeted={targetedIds.includes(card.id)}
-              key={card.id}
-              onLoadSoldComps={onLoadSoldComps}
-              onToggleTargeted={onToggleTargeted}
-              sold={soldComps[card.id]}
-            />
-          ))}
-          {!cards.length && !loading && (
-            <p className="empty-state">
-              {isTargetedView ? "No cards saved yet. Add targets from the Crown watchlist." : "No cards match this search."}
-            </p>
-          )}
-        </div>
-      )}
-    </>
+      <div className={filtersOpen ? "filter-panel open" : "filter-panel"}>
+        <label><span>Grade</span><select value={gradeProfile} onChange={(event) => onGradeProfileChange(event.target.value as GradeProfile)}>{gradeProfiles.map((grade) => <option key={grade}>{grade}</option>)}</select></label>
+        <label><span>Sort</span><select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as SortMode)}>{sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        <RarityMultiSelect open={rarityMenuOpen} options={rarityOptions} selected={selectedRarities} onOpenChange={onRarityMenuChange} onChange={onSelectedRaritiesChange} />
+      </div>
+
+      {!isTargetedView && <div className="set-status"><div><Check size={16} /><strong>{metadata?.total ?? totalCards}/230 cards loaded</strong></div><span>160 Base Set � 70 Galarian Gallery � final Sword & Shield expansion</span></div>}
+      {selectedRarities.length > 0 && <div className="active-filters"><span>Rarity:</span>{selectedRarities.map((rarity) => <button key={rarity} onClick={() => onSelectedRaritiesChange(selectedRarities.filter((item) => item !== rarity))} type="button">{rarity}<X size={12} /></button>)}<button onClick={() => onSelectedRaritiesChange([])} type="button">Clear all</button></div>}
+
+      {error && <div className="error-state"><strong>Card data unavailable</strong><span>{error}</span></div>}
+      {loading && <div className="loading-state"><Loader2 size={18} /><span>Loading the complete Crown Zenith checklist...</span></div>}
+      {!loading && !error && <div className="crown-grid">
+        {cards.map((card) => <CrownCardRow card={card} fxUsdToGbp={fxUsdToGbp} gradeProfile={gradeProfile} isTargeted={targetedIds.includes(card.id)} key={card.id} onLoadSoldComps={onLoadSoldComps} onToggleTargeted={onToggleTargeted} sold={soldComps[card.id]} />)}
+        {!cards.length && <div className="empty-panel"><Search size={22} /><strong>{isTargetedView ? "No matching targets" : "No cards found"}</strong><p>{isTargetedView ? "Save cards from Crown or adjust your filters." : "Try a different search, subset, or rarity."}</p></div>}
+      </div>}
+    </div>
   );
 }
 
-function CrownCardRow({
-  card,
-  fxUsdToGbp,
-  gradeProfile,
-  isTargeted,
-  onLoadSoldComps,
-  onToggleTargeted,
-  sold
-}: {
-  card: CrownZenithCard;
-  fxUsdToGbp: number;
-  gradeProfile: GradeProfile;
-  isTargeted: boolean;
-  onLoadSoldComps: (card: CrownZenithCard) => void;
-  onToggleTargeted: (card: CrownZenithCard) => void;
-  sold?: SoldComps;
-}) {
+function RarityMultiSelect({ open, options, selected, onOpenChange, onChange }: { open: boolean; options: string[]; selected: string[]; onOpenChange: (open: boolean) => void; onChange: (values: string[]) => void }) {
+  const toggle = (rarity: string) => onChange(selected.includes(rarity) ? selected.filter((item) => item !== rarity) : [...selected, rarity]);
+  return <div className="multi-select"><span>Rarity</span><button className="multi-select-trigger" onClick={() => onOpenChange(!open)} type="button"><span>{selected.length === 0 ? "All rarities" : `${selected.length} selected`}</span><ChevronDown size={15} /></button>{open && <div className="multi-select-menu">
+    <button className="select-all" onClick={() => onChange([])} type="button"><span className={selected.length === 0 ? "checkbox checked" : "checkbox"}>{selected.length === 0 && <Check size={12} />}</span>All rarities</button>
+    {options.map((rarity) => <button key={rarity} onClick={() => toggle(rarity)} type="button"><span className={selected.includes(rarity) ? "checkbox checked" : "checkbox"}>{selected.includes(rarity) && <Check size={12} />}</span>{rarity}</button>)}
+  </div>}</div>;
+}
+
+function CrownCardRow({ card, fxUsdToGbp, gradeProfile, isTargeted, onLoadSoldComps, onToggleTargeted, sold }: { card: CrownZenithCard; fxUsdToGbp: number; gradeProfile: GradeProfile; isTargeted: boolean; onLoadSoldComps: (card: CrownZenithCard) => void; onToggleTargeted: (card: CrownZenithCard) => void; sold?: SoldComps }) {
   const tcgMarket = getTcgMarket(card);
-  const cardmarket = card.cardmarket?.prices?.averageSellPrice;
+  const cardmarket = card.cardmarket?.prices?.averageSellPrice ?? card.cardmarket?.prices?.trendPrice;
   const margin = getUsUkMargin(sold, fxUsdToGbp);
   const query = buildCardQuery(card.name, gradeProfile);
-
-  return (
-    <article className="crown-card">
-      <div className="crown-card-main">
-        <div className="crown-thumb">
-          {card.images?.small ? <img alt={card.name} src={card.images.small} /> : <span>{card.number}</span>}
-        </div>
-        <div>
-          <strong>{card.name}</strong>
-          <small>
-            #{card.number} / {card.rarity ?? "Unknown rarity"}
-          </small>
-          <div className="pill-row compact">
-            <span>{gradeProfile}</span>
-            <span>TCGPlayer {tcgMarket ? formatCurrency(tcgMarket, "USD") : "n/a"}</span>
-            <span>Cardmarket {cardmarket ? formatCurrency(cardmarket, "EUR") : "n/a"}</span>
-          </div>
-        </div>
+  return <article className="crown-card">
+    <div className="crown-card-main">
+      <div className="crown-thumb">{card.images?.small ? <img alt={`${card.name} card`} loading="lazy" src={card.images.small} /> : <span>{card.number}</span>}</div>
+      <div className="card-identity"><div className="card-title-row"><div><strong>{card.name}</strong><small>{card.subsetLabel} � #{card.number}/{card.setTotal}</small></div><button className={isTargeted ? "save-button saved" : "save-button"} onClick={() => onToggleTargeted(card)} aria-label={isTargeted ? "Remove from Targeted" : "Save to Targeted"} type="button"><Bookmark size={17} fill={isTargeted ? "currentColor" : "none"} /></button></div>
+        <div className="card-tags"><span>{card.rarity ?? "Unknown rarity"}</span>{gradeProfile !== "Raw" && <span>{gradeProfile}</span>}</div>
+        <div className="reference-prices"><div><small>TCGPlayer</small><strong>{tcgMarket ? formatCurrency(tcgMarket, "USD") : "�"}</strong></div><div><small>Cardmarket</small><strong>{cardmarket ? formatCurrency(cardmarket, "EUR") : "�"}</strong></div></div>
       </div>
-
-      <div className="market-actions">
-        <div className="comp-summary">
-          <strong>US avg</strong>
-          <span>{formatSoldAverage(sold?.US)}</span>
-        </div>
-        <div className="comp-summary">
-          <strong>UK avg</strong>
-          <span>{formatSoldAverage(sold?.UK)}</span>
-        </div>
-        <div className={margin && margin.value >= 0 ? "comp-summary margin-positive" : "comp-summary"}>
-          <strong>Margin</strong>
-          <span>{margin ? `${formatMoney(margin.value)} / ${formatPercent(margin.percent)}` : "Load comps"}</span>
-        </div>
-        <a href={ebaySearchUrl(query, "US")} rel="noreferrer" target="_blank">
-          US active <ExternalLink size={14} />
-        </a>
-        <a href={ebaySearchUrl(query, "UK")} rel="noreferrer" target="_blank">
-          UK active <ExternalLink size={14} />
-        </a>
-        <a href={ebaySoldUrl(query, "US")} rel="noreferrer" target="_blank">
-          US sold <ExternalLink size={14} />
-        </a>
-        <a href={ebaySoldUrl(query, "UK")} rel="noreferrer" target="_blank">
-          UK sold <ExternalLink size={14} />
-        </a>
-        <button className={isTargeted ? "target-button saved" : "target-button"} onClick={() => onToggleTargeted(card)} type="button">
-          {isTargeted ? "Saved" : "Target"}
-        </button>
-        <button disabled={sold?.loading} onClick={() => onLoadSoldComps(card)} type="button">
-          {sold?.loading ? <Loader2 size={14} /> : <RefreshCcw size={14} />}
-          Get last 3
-        </button>
-      </div>
-
-      {sold && !sold.loading && (
-        <div className="sold-comps">
-          <SoldCompsPanel market="US" sold={sold.US} />
-          <SoldCompsPanel market="UK" sold={sold.UK} />
-        </div>
-      )}
-    </article>
-  );
+    </div>
+    <div className="comp-grid"><div><small>US market</small><strong>{formatSoldAverage(sold?.US)}</strong></div><div><small>UK market</small><strong>{formatSoldAverage(sold?.UK)}</strong></div><div className={margin && margin.value >= 0 ? "positive" : ""}><small>UK margin</small><strong>{margin ? `${formatMoney(margin.value)} � ${formatPercent(margin.percent)}` : "Load prices"}</strong></div></div>
+    <div className="card-primary-actions"><button className="load-card-prices" disabled={sold?.loading} onClick={() => onLoadSoldComps(card)} type="button">{sold?.loading ? <Loader2 size={15} /> : <RefreshCcw size={15} />}<span>{sold?.loading ? "Checking..." : "Check market"}</span></button><a href={ebaySearchUrl(query, "UK")} rel="noreferrer" target="_blank">UK listings<ExternalLink size={14} /></a></div>
+    <details className="research-details"><summary>More eBay research <ChevronDown size={15} /></summary><div className="research-links"><a href={ebaySearchUrl(query, "US")} rel="noreferrer" target="_blank">US active<ExternalLink size={13} /></a><a href={ebaySearchUrl(query, "UK")} rel="noreferrer" target="_blank">UK active<ExternalLink size={13} /></a><a href={ebaySoldUrl(query, "US")} rel="noreferrer" target="_blank">US sold<ExternalLink size={13} /></a><a href={ebaySoldUrl(query, "UK")} rel="noreferrer" target="_blank">UK sold<ExternalLink size={13} /></a></div>{sold && !sold.loading && <div className="sold-comps"><SoldCompsPanel market="US" sold={sold.US} /><SoldCompsPanel market="UK" sold={sold.UK} /></div>}</details>
+  </article>;
 }
 
 function SoldCompsPanel({ market, sold }: { market: EbayMarket; sold?: EbaySoldResponse }) {

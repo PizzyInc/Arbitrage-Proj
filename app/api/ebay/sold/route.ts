@@ -1,155 +1,123 @@
 import { NextResponse } from "next/server";
-import { EbayMarket, EbaySale, ebaySoldUrl } from "@/lib/ebay";
+import { EbayMarket, EbaySale, ebaySearchUrl } from "@/lib/ebay";
 
-const MARKET_CURRENCY = {
-  UK: "GBP",
-  US: "USD"
+export const runtime = "nodejs";
+
+const MARKET = {
+  UK: { currency: "GBP", id: "EBAY_GB" },
+  US: { currency: "USD", id: "EBAY_US" }
 } as const;
 
-// Rotate user agents to reduce blocking
-const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0"
-];
+type TokenCache = { accessToken: string; expiresAt: number };
+type EbayItemSummary = {
+  itemId: string;
+  itemWebUrl?: string;
+  price?: { currency?: string; value?: string };
+  title?: string;
+};
 
-function getRandomUserAgent(): string {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
+const tokenStore = globalThis as typeof globalThis & { ebayTokenCache?: TokenCache };
 
-function decodeHtml(value: string) {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
+async function getAccessToken() {
+  const clientId = process.env.EBAY_CLIENT_ID;
+  const clientSecret = process.env.EBAY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
 
-function parseSales(html: string, market: EbayMarket): EbaySale[] {
-  const currency = MARKET_CURRENCY[market];
-  const itemBlocks = html.match(/<li[^>]*class="[^"]*s-item[^"]*"[\s\S]*?<\/li>/gi) ?? [];
-  const sales: EbaySale[] = [];
-  const pricePattern =
-    market === "UK"
-      ? /(?:£|GBP\s*)([\d,.]+)/
-      : /(?:US\s*)?\$([\d,.]+)/;
-
-  for (const block of itemBlocks) {
-    const titleMatch =
-      block.match(/<div[^>]*class="[^"]*s-item__title[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ??
-      block.match(/<span[^>]*role="heading"[^>]*>([\s\S]*?)<\/span>/i);
-    const linkMatch = block.match(/<a[^>]*class="[^"]*s-item__link[^"]*"[^>]*href="([^"]+)"/i);
-    const priceMatch = block.match(pricePattern);
-
-    if (!titleMatch || !linkMatch || !priceMatch) continue;
-
-    const title = decodeHtml(titleMatch[1].replace(/<[^>]+>/g, "").trim());
-    const price = Number(priceMatch[1].replace(/,/g, ""));
-
-    if (!title || title.toLowerCase() === "shop on ebay" || Number.isNaN(price)) continue;
-
-    sales.push({
-      title,
-      price,
-      currency,
-      url: decodeHtml(linkMatch[1])
-    });
-
-    if (sales.length === 3) break;
+  if (tokenStore.ebayTokenCache && tokenStore.ebayTokenCache.expiresAt > Date.now() + 60_000) {
+    return tokenStore.ebayTokenCache.accessToken;
   }
 
-  return sales;
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const response = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      scope: "https://api.ebay.com/oauth/api_scope"
+    }),
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    method: "POST",
+    cache: "no-store"
+  });
+
+  if (!response.ok) throw new Error(`eBay OAuth returned ${response.status}`);
+  const payload = (await response.json()) as { access_token: string; expires_in: number };
+  tokenStore.ebayTokenCache = {
+    accessToken: payload.access_token,
+    expiresAt: Date.now() + payload.expires_in * 1000
+  };
+  return payload.access_token;
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim();
-  const market = searchParams.get("market") === "UK" ? "UK" : "US";
+  const market: EbayMarket = searchParams.get("market") === "UK" ? "UK" : "US";
 
-  if (!query) {
-    return NextResponse.json({ error: "Missing query" }, { status: 400 });
-  }
+  if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
 
-  const sourceUrl = ebaySoldUrl(query, market);
+  const sourceUrl = ebaySearchUrl(query, market);
+  const marketConfig = MARKET[market];
 
   try {
-    const response = await fetch(sourceUrl, {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      return NextResponse.json({
+        average: null,
+        currency: marketConfig.currency,
+        market,
+        query,
+        sales: [],
+        sourceUrl,
+        warning: "Live eBay pricing requires EBAY_CLIENT_ID and EBAY_CLIENT_SECRET. Current TCGPlayer and Cardmarket prices remain available."
+      });
+    }
+
+    const params = new URLSearchParams({
+      q: `Pokemon Crown Zenith ${query}`,
+      limit: "3",
+      filter: "buyingOptions:{FIXED_PRICE}"
+    });
+    const response = await fetch(`https://api.ebay.com/buy/browse/v1/item_summary/search?${params.toString()}`, {
       headers: {
-        "User-Agent": getRandomUserAgent(),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": market === "UK" ? "en-GB,en;q=0.9" : "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Referer": market === "UK" ? "https://www.ebay.co.uk/" : "https://www.ebay.com/",
-        "DNT": "1",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "same-origin",
-        "Cache-Control": "max-age=0"
+        Authorization: `Bearer ${accessToken}`,
+        "X-EBAY-C-MARKETPLACE-ID": marketConfig.id
       },
-      next: {
-        revalidate: 900
-      }
+      next: { revalidate: 900 }
     });
 
-    if (response.status === 403) {
-      return NextResponse.json(
-        {
-          average: null,
-          currency: MARKET_CURRENCY[market],
-          market,
-          query,
-          sales: [],
-          sourceUrl,
-          warning: "eBay blocked this request (403). Please open the link directly to view sold listings and search for comps manually."
-        },
-        { status: 200 }
-      );
-    }
-
-    if (!response.ok) {
-      return NextResponse.json(
-        {
-          average: null,
-          currency: MARKET_CURRENCY[market],
-          market,
-          query,
-          sales: [],
-          sourceUrl,
-          warning: `eBay returned ${response.status}. Open the sold-search link for live results.`
-        },
-        { status: 200 }
-      );
-    }
-
-    const html = await response.text();
-    const sales = parseSales(html, market);
-    const average = sales.length
-      ? sales.reduce((sum, sale) => sum + sale.price, 0) / sales.length
-      : null;
+    if (!response.ok) throw new Error(`eBay Browse API returned ${response.status}`);
+    const payload = (await response.json()) as { itemSummaries?: EbayItemSummary[] };
+    const sales: EbaySale[] = (payload.itemSummaries ?? [])
+      .map((item) => ({
+        title: item.title ?? query,
+        price: Number(item.price?.value),
+        currency: marketConfig.currency,
+        url: item.itemWebUrl ?? sourceUrl
+      }))
+      .filter((item) => Number.isFinite(item.price) && item.price > 0)
+      .slice(0, 3);
+    const average = sales.length ? sales.reduce((sum, item) => sum + item.price, 0) / sales.length : null;
 
     return NextResponse.json({
       average,
-      currency: MARKET_CURRENCY[market],
+      currency: marketConfig.currency,
       market,
       query,
       sales,
       sourceUrl,
-      warning: sales.length ? undefined : "No sold items could be parsed from eBay. Open the sold-search link for live results."
+      warning: sales.length ? undefined : "No matching fixed-price eBay listings were returned."
     });
   } catch (error) {
     return NextResponse.json({
       average: null,
-      currency: MARKET_CURRENCY[market],
+      currency: marketConfig.currency,
       market,
       query,
       sales: [],
       sourceUrl,
-      warning: `Could not fetch eBay sold results: ${error instanceof Error ? error.message : "Unknown error"}. Open the sold-search link for live results.`
+      warning: error instanceof Error ? error.message : "eBay pricing is temporarily unavailable."
     });
   }
 }
