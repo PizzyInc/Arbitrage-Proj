@@ -156,7 +156,7 @@ td small,
 
 .nav-list {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .nav-item,
@@ -193,6 +193,7 @@ td small,
   justify-content: flex-start;
   width: 100%;
   font-weight: 500;
+  position: relative;
 }
 
 .nav-item.active {
@@ -1021,6 +1022,37 @@ code {
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .nav-list {
+    gap: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .nav-item {
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+    min-height: 50px;
+    min-width: 50px;
+    position: relative;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .nav-item span {
+    display: none;
+    font-size: 11px;
+    white-space: nowrap;
+    margin-top: 0;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .nav-item:hover span {
+    display: block;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1084,6 +1116,14 @@ code {
 
   .nav-item span {
     display: inline;
+    margin-top: 4px;
+  }
+
+  .nav-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 14px;
+    min-width: auto;
   }
 
   input,
